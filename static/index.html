@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>My Rust + Webpack project!</title>
+    <style>
+      #renderCanvas {
+        width: 500px;
+        height: 500px;
+      }
+    </style>
+    <script src="index.js"></script>
+  </head>
+  <body>
+    <h2>Test</h2>
+    <canvas id="renderCanvas"></canvas>
+    <script>
+      const canvas = document.getElementById("renderCanvas");
+      const vwr = new dirtvis.Viewer(canvas);
+      vwr.init();
+    </script>
+  </body>
+</html>

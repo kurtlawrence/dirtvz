@@ -1,0 +1,22 @@
+{
+  "author": "You <you@example.com>",
+  "name": "dirtvis",
+  "version": "0.1.0",
+  "scripts": {
+    "build": "rimraf dist pkg && webpack",
+    "start": "rimraf dist pkg && webpack-dev-server --open",
+    "test": "cargo test && wasm-pack test --headless"
+  },
+  "devDependencies": {
+    "@wasm-tool/wasm-pack-plugin": "^1.1.0",
+    "copy-webpack-plugin": "^11.0.0",
+    "rimraf": "^5.0.1",
+    "ts-loader": "^9.4.2",
+    "webpack": "^5.83.1",
+    "webpack-cli": "^5.1.1",
+    "webpack-dev-server": "^4.15.0"
+  },
+  "dependencies": {
+    "@babylonjs/core": "^6.4.1"
+  }
+}
