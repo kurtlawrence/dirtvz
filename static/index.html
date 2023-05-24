@@ -16,8 +16,7 @@
     <canvas id="renderCanvas"></canvas>
     <script>
       const canvas = document.getElementById("renderCanvas");
-      const vwr = new dirtvis.Viewer(canvas);
-      vwr.init();
+      const vwr = new dirtvis.Viewer.init(canvas, "test-db");
     </script>
   </body>
 </html>

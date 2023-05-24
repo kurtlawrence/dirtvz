@@ -18,6 +18,11 @@ module.exports = {
         test: /\.ts?$/,
         loader: 'ts-loader',
         exclude: '/node_modules'
+      },
+      // workers
+      {
+        test: /\.worker\.ts$/,
+        use: { loader: 'worker-loader' }
       }
     ]
   },
