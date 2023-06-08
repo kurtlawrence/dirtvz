@@ -3,20 +3,15 @@
   <head>
     <meta charset="UTF-8">
     <title>My Rust + Webpack project!</title>
-    <style>
-      #renderCanvas {
-        width: 500px;
-        height: 500px;
-      }
-    </style>
     <script src="index.js"></script>
   </head>
   <body>
-    <h2>Test</h2>
-    <canvas id="renderCanvas"></canvas>
-    <script>
-      const canvas = document.getElementById("renderCanvas");
-      const vwr = new dirtvis.Viewer.init(canvas, "test-db");
-    </script>
+	<div id="viewer"></div>
+	<script>
+		dirtvis.then(x => x.viewerUi('viewer'));
+		// if (dirtvis instanceof Promise)
+		// else
+			// dirtvis.viewerUi('viewer');
+	</script>
   </body>
 </html>

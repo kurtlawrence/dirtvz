@@ -3,3 +3,5 @@ node_modules
 /target
 /pkg
 /wasm-pack.log
+/elm-stuff
+/js/viewer-ui.js

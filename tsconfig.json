@@ -1,8 +1,13 @@
 {
     "include": [
-        "ts/**/*.ts"
+        "ts/**/*.ts",
+		"js/*.js"
     ],
     "compilerOptions": {
-        "strict": true
+		"target": "es2020",
+		"moduleResolution": "node",
+        "strict": true,
+		"allowJs": true,
+		"checkJs": false,
     }
 }
