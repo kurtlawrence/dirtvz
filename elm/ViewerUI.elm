@@ -1,6 +1,7 @@
 module ViewerUI exposing (..)
 
 import Browser
+import SpatialObject exposing (SpatialObject)
 import File exposing (File)
 import File.Select
 import Html exposing (..)
@@ -30,12 +31,14 @@ main =
 
 type alias Model =
     { notice : Notice.Notice
+    , objList : List SpatialObject
     }
 
 
 type Msg
     = Notice Notice.Notice
     | PickSpatialFile
+    | RecvObjectList (List SpatialObject)
 
 
 type alias Flags =
@@ -49,6 +52,7 @@ type alias Html =
 init : Flags -> ( Model, Cmd Msg )
 init _ =
     ( { notice = Notice.None
+    , objList = []
       }
     , Cmd.none
     )
@@ -67,6 +71,9 @@ update msg model =
         PickSpatialFile ->
             ( model, Ports.pickSpatialFile () )
 
+        RecvObjectList list ->
+            ( { model | objList = list }, Cmd.none )
+
 
 
 liftUpdate : (b -> Msg) -> (a -> Model) -> ( a, Cmd b ) -> ( Model, Cmd Msg )
@@ -80,7 +87,10 @@ liftUpdate toMsg toModel =
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    Notice.getNotice (Notice.recv Notice)
+    Sub.batch
+    [ Notice.getNotice (Notice.recv Notice)
+    , Ports.objectList RecvObjectList
+    ]
 
 
 
@@ -95,7 +105,8 @@ view model =
         , div []
             [ node "dirtvis-viewer" [ style "display" "block", style "width" "500px", style "height" "500px" ] []
             ]
-        , div [] [button [onClick PickSpatialFile] [ text "Add spaital object" ] ]
+        , div [] [ objectListView model.objList ]
+        , div [] [button [onClick PickSpatialFile] [ text "Add spatial object" ] ]
         , div [] [ noticeView model.notice ]
         ]
 
@@ -113,3 +124,9 @@ noticeView notice =
 
         Notice.Waiting x ->
             text ("⏳ Waiting: " ++ x)
+
+objectListView : List SpatialObject -> Html
+objectListView =
+    List.map (\{ key, status } -> div [] [ strong [] [ text key ], em [] [ text status ] ])
+    >> div []
+

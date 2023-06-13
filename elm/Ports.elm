@@ -1,9 +1,7 @@
 port module Ports exposing (..)
 
-import Array exposing (Array)
-import Bytes
-import Bytes.Decode
-import File exposing (File)
-import Task
+import SpatialObject
 
 port pickSpatialFile : () -> Cmd a
+
+port objectList : (List SpatialObject.SpatialObject -> msg) -> Sub msg

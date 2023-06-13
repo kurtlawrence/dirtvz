@@ -1,13 +1,17 @@
-const path = require("path");
-const CopyPlugin = require("copy-webpack-plugin");
+// import { fileURLToPath } from 'url';
+const path = require('path');
+const CopyPlugin = require('copy-webpack-plugin');
 // const WasmPackPlugin = require("@wasm-tool/wasm-pack-plugin");
 
+// const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dist = path.resolve(__dirname, "dist");
 
+// const config = {
 module.exports = {
   mode: "development",
   entry: {
     index: "./ts/index.ts",
+	worker: './ts/worker.ts',
   },
   resolve: {
     extensions: [".ts", ".js"],
@@ -18,11 +22,6 @@ module.exports = {
         test: /\.ts?$/,
         loader: "ts-loader",
         exclude: "/node_modules",
-      },
-      // workers
-      {
-        test: /\.worker\.ts$/,
-        use: { loader: "worker-loader" },
       },
     ],
   },
@@ -53,3 +52,5 @@ module.exports = {
 //    }),
   ],
 };
+
+// export default config;

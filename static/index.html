@@ -8,10 +8,10 @@
   <body>
 	<div id="viewer"></div>
 	<script>
-		dirtvis.then(x => x.viewerUi('viewer'));
-		// if (dirtvis instanceof Promise)
-		// else
-			// dirtvis.viewerUi('viewer');
+		if (dirtvis instanceof Promise)
+		  dirtvis.then(x => x.viewerUi('viewer'));
+		else
+			dirtvis.viewerUi('viewer');
 	</script>
   </body>
 </html>

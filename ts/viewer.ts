@@ -77,8 +77,4 @@ class Viewer {
 
     return vwr;
   }
-
-  load_object(key: string, obj: TriangleMeshSurface): SpatialObject {
-	  return this.store.store_object(key, obj);
-  }
 }

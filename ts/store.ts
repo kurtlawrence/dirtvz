@@ -1,25 +1,26 @@
 import { SpatialObject, Status } from "./spatial-obj";
 import { openDB, IDBPDatabase } from "idb";
 import { Extents2, TriangleMeshSurface } from './data';
-import ObjectPreprocessor from "worker-loader!./worker";
 
 export { Store };
+  
+const STORE_NAME = "keyval";
 
 class Store {
-  static store_name = "keyval";
 
   db_name: string;
   db: IDBPDatabase;
-  loaded: Map<string, SpatialObject>;
 
   private constructor(db_name: string, db: IDBPDatabase) {
     this.db_name = db_name;
     this.db = db;
-    this.loaded = new Map();
   }
 
   static async connect(db_name: string): Promise<Store> {
-    const db = await openDB(db_name, undefined, {
+    const db = await openDB(db_name, 2, {
+		upgrade(db) {
+			db.createObjectStore(STORE_NAME);
+		},
       terminated: () =>
         console.error("Browser abnormally closed connection to " + db_name),
     });
@@ -29,22 +30,38 @@ class Store {
     return new Store(db_name, db);
   }
 
-  store_object(key: string, obj: TriangleMeshSurface): SpatialObject {
-    // remove old object using the same key
-    // this.store.delete(key);
+  private async put(key: string, obj: any) {
+	  await this.db.put(STORE_NAME, obj, key);
+  }
 
-    const worker = new ObjectPreprocessor();
+  private async get<T>(key: string) : Promise<T | undefined> {
+	  return await this.db.get(STORE_NAME, key);
+  }
 
-    worker.postMessage({
-      obj: TriangleMeshSurface,
-    });
+  async store_object(key: string, obj: TriangleMeshSurface): Promise<SpatialObject> {
+	  let bytes = obj.to_bytes();
+	  await this.put(key, bytes);
 
-    worker.onmessage = (ev) => this.recv_repr(key, ev.data);
-
-	const o = new SpatialObject(key);
+    const o = new SpatialObject(key);
 	o.status = Status.Preprocessing;
+	await this.update_object_list(o);
 
 	return o;
+  }
+
+  async get_object_list() : Promise<Array<SpatialObject>> {
+	  return await this.get('object-list') ?? [];
+  }
+
+  private async update_object_list(sobj: SpatialObject) {
+	  let objs = await this.get_object_list();
+	  let idx = objs.findIndex(o => o.key == sobj.key);
+	  if (idx > -1) {
+		  objs[idx] = sobj;
+	  } else {
+		  objs.push(sobj);
+	  }
+	  await this.put('object-list', objs);
   }
 
   recv_repr(key: string, repr: number) {}

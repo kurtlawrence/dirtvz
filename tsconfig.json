@@ -1,13 +1,14 @@
 {
-    "include": [
-        "ts/**/*.ts",
-		"js/*.js"
-    ],
-    "compilerOptions": {
-		"target": "es2020",
-		"moduleResolution": "node",
-        "strict": true,
-		"allowJs": true,
-		"checkJs": false,
-    }
+  "include": [
+    "ts/**/*.ts",
+    "js/*.js"
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "node",
+    "strict": true,
+    "allowJs": true,
+    "checkJs": false,
+  }
 }

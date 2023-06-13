@@ -69,6 +69,30 @@ impl TriangleMeshSurface {
         }
     }
 
+    /// Serialize the mesh into binary data.
+    ///
+    /// See [`Self::from_bytes`] for the format.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let Self { points, indices, translate } = self;
+
+        let mut buf = Vec::new();
+
+        // first write the translation point
+        buf.extend(translate.x.to_be_bytes());
+        buf.extend(translate.y.to_be_bytes());
+        buf.extend(translate.z.to_be_bytes());
+
+        // next write the points
+        buf.extend((points.len() as u64).to_be_bytes());
+        buf.extend(points.iter().copied().flat_map(f32::to_be_bytes));
+
+        // finally write the indices
+        buf.extend((indices.len() as u64).to_be_bytes());
+        buf.extend(indices.iter().copied().flat_map(u32::to_be_bytes));
+
+        buf
+    }
+
     /// Fills `self` by deserializing a vulcan 00t triangulation.
     ///
     /// If this fails, `self` is unchanged.

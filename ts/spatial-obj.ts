@@ -15,7 +15,7 @@ class SpatialObject {
 }
 
 enum Status {
-  Unloaded,
-  Preprocessing,
-  Loaded,
+  Unloaded = 'unloaded',
+  Preprocessing = 'preprocessing',
+  Loaded = 'loaded',
 }
