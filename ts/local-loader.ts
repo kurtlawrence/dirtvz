@@ -1,4 +1,4 @@
-import { TriangleMeshSurface } from './data';
+import { TriangleMeshSurface } from './wasm';
 
 export class SpatialObject {
 	constructor(public name: string | null, public obj: TriangleMeshSurface) {}
@@ -20,8 +20,7 @@ export async function parse_file(file: File) : Promise<SpatialObject> {
 	      throw new Error('file has no extension');
 
 	   case '00t':
-	       let mesh = TriangleMeshSurface.empty();
-	       mesh.from_vulcan_00t(data);
+	       let mesh = TriangleMeshSurface.from_vulcan_00t(data);
 		   return new SpatialObject(name2, mesh);
 
 	   default:

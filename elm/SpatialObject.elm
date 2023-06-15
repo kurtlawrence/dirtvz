@@ -1,6 +1,7 @@
 module SpatialObject exposing (..)
 
-type alias SpatialObject = 
-    { key: String
-    , status: String
+
+type alias SpatialObject =
+    { key : String
+    , status : String
     }

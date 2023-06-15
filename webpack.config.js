@@ -11,7 +11,7 @@ module.exports = {
   mode: "development",
   entry: {
     index: "./ts/index.ts",
-	worker: './ts/worker.ts',
+	  worker: './ts/worker.ts',
   },
   resolve: {
     extensions: [".ts", ".js"],

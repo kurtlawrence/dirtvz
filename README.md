@@ -1,8 +1,8 @@
 # Developing commands
 
 ```sh
-# Build Rust to WASM
-wasm-pack build --debug --out-dir wasmpkg --out-name wasm --target bundler
+# Build Rust to WASM (use --debug for debugging, BUT IS VERY SLOW!)
+wasm-pack build --out-dir wasmpkg --out-name wasm --target bundler
 # Builds Elm
 elm make elm/ViewerUI.elm --output=js/viewer-ui.js
 # Builds Typescript

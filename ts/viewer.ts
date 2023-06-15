@@ -6,8 +6,6 @@ import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { CreateGround } from "@babylonjs/core/Meshes/Builders/groundBuilder";
 import { CreateSphere } from "@babylonjs/core/Meshes/Builders/sphereBuilder";
 import { Scene } from "@babylonjs/core/scene";
-import { TriangleMeshSurface } from './data';
-import { SpatialObject } from "./spatial-obj";
 import { Store } from "./store";
 
 export { Viewer };
