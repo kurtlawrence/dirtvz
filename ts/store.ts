@@ -2,7 +2,7 @@ import { SpatialObject, Status } from "./spatial-obj";
 import { openDB, IDBPDatabase } from "idb";
 import { TriangleMeshSurface, Extents3 } from './wasm';
 
-export { Store };
+export { Store, Tile, Lod };
 
 const STORE_NAME = "keyval";
 
@@ -57,8 +57,7 @@ class Store {
 		let bytes = obj.to_bytes();
 		await this.put_bytes(['raw', key], bytes);
 
-		const o = new SpatialObject(key);
-		o.status = Status.Preprocessing;
+		const o = { key, status: Status.Preprocessing, tiles: [] };
 		await this.update_object_list(o);
 
 		return o;
@@ -83,8 +82,7 @@ class Store {
 		// update the object list
 		let objs: Array<SpatialObject> = (await store.get('object-list') ?? []);
 		let sobj_idx = objs.findIndex(x => x.key == objkey);
-		if (sobj_idx == -1)
-		{
+		if (sobj_idx == -1) {
 			await tx.done;
 			return;
 		}
@@ -116,7 +114,7 @@ class Store {
 		return await this.get('object-list') ?? [];
 	}
 
-	async find_object(objkey: string) : Promise<SpatialObject | undefined> {
+	async find_object(objkey: string): Promise<SpatialObject | undefined> {
 		return (await this.get_object_list()).find(x => x.key == objkey);
 	}
 
@@ -161,7 +159,7 @@ class Store {
 		add_tile_idx(sobj, tile_idx);
 
 		let tilekey = ['tile', obj, tile_idx];
-		let tile = await this.get<Tile>(tilekey) ?? new Tile(tile_idx);
+		let tile = await this.get<Tile>(tilekey) ?? { idx: tile_idx, lods: [] };
 
 		add_lod(tile, lod_idx, lod_res);
 
@@ -170,11 +168,21 @@ class Store {
 		await this.put(tilekey, tile);
 		await this.update_object_list(sobj);
 	}
+
+	async get_tile(obj: string, tile_idx: number): Promise<Tile | undefined> {
+		return this.get<Tile>(['tile', obj, tile_idx]);
+	}
+
+	async get_lod(obj: string, tile_idx: number, lod_idx: number): Promise<Float32Array | undefined> {
+		var bytes = await this.get_bytes(['lod', obj, tile_idx, lod_idx]);
+		if (bytes) return new Float32Array(bytes.buffer);
+		else return undefined;
+	}
 }
 
-class Tile {
-	lods: Array<Lod> = [];
-	constructor(public idx: number) { }
+type Tile = {
+	lods: Array<Lod>,
+	idx: number,
 }
 
 type Lod = {

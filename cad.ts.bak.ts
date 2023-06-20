@@ -1,10 +1,6 @@
 // import * as BABYLON from 'babylonjs'; // uncomment when developing
 
 class CAD {
-    static DRAWZ: number = 100_000; // the camera draw z level
-    // used by the camera and skybox. We want this as infinite as possible
-    // so the camera 'height' is placed at 20% this value, while skybox size is 50%
-
     canvas: HTMLCanvasElement;
     engine: BABYLON.Engine;
     scene: BABYLON.Scene;
@@ -34,46 +30,8 @@ class CAD {
 
     initCamera() {
         let canvas = this.canvas;
-        this.camera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
-        this.camera.allowUpsideDown = false;
-        this.camera.maxZ = CAD.DRAWZ;
 
-        // Interactions -- manually add interactions since they are somewhat bespoke
-        let pan: Pan | null = null;
-        let rotate: Rotate | null = null;
-        // mouse down:
-        canvas.addEventListener('pointerdown', ev => {
-            if (!this.measure && ev.button == 0 && !ev.ctrlKey) {
-                pan = Pan.start(this.scene, this.canvas, this.camera);
-            } else if (!this.measure && !pan && (ev.button == 2 || ev.button == 0 && ev.ctrlKey)) {
-                rotate = Rotate.start(this.scene, this.canvas, this.camera);
-            }
-        });
-        canvas.addEventListener('pointerup', ev => {
-            if (pan) { pan = null; } // stop panning state
-            if (rotate) { rotate = null; } // stop rotating state
-        });
-        canvas.addEventListener('pointermove', ev => {
-            if (pan) {
-                pan.doPan(this.scene, this.canvas, this.camera);
-            } else if (rotate) {
-                rotate.doRotate(this.scene, this.canvas, this.camera);
-            }
-        });
         canvas.addEventListener('dblclick', ev => this.zoomAll());
-        canvas.addEventListener('wheel', ev => {
-            ev.preventDefault();
-            const rect = this.canvas.getBoundingClientRect();
-            let x = this.scene.pointerX;
-            let y = this.scene.pointerY;
-            x = x / rect.width * 2 - 1;
-            y = y / rect.height * -2 + 1; // y is reversed (since from top)
-            // can reverse this to reverse zooming
-            if (ev.deltaY > 0)
-                this.zoom(0.8, x, y);
-            else
-                this.zoom(1.2, x, y);
-        });
         canvas.addEventListener('contextmenu', ev => {
             ev.preventDefault();
             return false;
@@ -131,35 +89,6 @@ class CAD {
             this.engine.resize();
             this.zoomAll();
         });
-    }
-
-    // Camera Interactions
-
-    // mouse x/y is a ratio of the canvas from the centre
-    // bottom-left is (-1,-1)
-    // top-right is (1,1)
-    zoom(factor: number, mousex: number, mousey: number) {
-        // zooming adjusts for the mouse deviation from the centre
-        // this simulates zoom to mouse location
-        // centre is (0,0), top-right is (1,1) and bottom left is (-1,-1)
-        // at extents of 1, the movement on that edge is zero
-        // for a zoom in, (where the diff is shrunk), the delta is +
-        // for a zoom out (where the diff is increased), the delta is -
-        // y is referenced here, but it would actually be 'z' since y-up
-        let dx = this.camera.orthoRight - this.camera.orthoLeft;
-        let dy = this.camera.orthoTop - this.camera.orthoBottom;
-        const x = this.camera.orthoLeft + dx * 0.5;
-        const y = this.camera.orthoBottom + dy * 0.5;
-        const slipFactor = 0.5
-        const xslip = mousex * dx * (1 - factor) * slipFactor;
-        const yslip = mousey * dy * (1 - factor) * slipFactor;
-        dx *= factor * 0.5; // half in each direction
-        dy *= factor * 0.5;
-
-        this.camera.orthoTop = y + yslip + dy;
-        this.camera.orthoBottom = y + yslip - dy;
-        this.camera.orthoLeft = x + xslip - dx;
-        this.camera.orthoRight = x + xslip + dx;
     }
 
     zoomAll() {
@@ -342,96 +271,6 @@ class CAD {
 
         this.scene.autoClear = false; // PERF: We always are looking inside skybox
         this.scene.autoClearDepthAndStencil = false; // PERF: We always are looking inside skybox
-    }
-}
-
-class Pan {
-    mousex: number; // from left
-    mousey: number; // from top
-    stride: number; // current world/screen size. 1:1 for x and y given it is ortho
-    origin: BABYLON.Vector4; // (orthoLeft, orthoRight, orthoTop, orthoBottom)
-
-    static start(scene: BABYLON.Scene, canvas: HTMLCanvasElement, camera: BABYLON.TargetCamera): Pan {
-        let rect = canvas.getBoundingClientRect();
-        const x = scene.pointerX;
-        const y = scene.pointerY;
-        let stride = (camera.orthoRight - camera.orthoLeft) / rect.width;
-
-        const pan = new Pan();
-        pan.mousex = x;
-        pan.mousey = y;
-        pan.stride = stride;
-        pan.origin = new BABYLON.Vector4(camera.orthoLeft, camera.orthoRight, camera.orthoTop, camera.orthoBottom);
-
-        return pan;
-    }
-
-    doPan(scene: BABYLON.Scene, canvas: HTMLCanvasElement, camera: BABYLON.TargetCamera) {
-        // gets the difference in mouse coords, and applies them to the ortho view
-        // notice the inverted notions of x and y (since x is from left, and y is from top)
-        const xD = (this.mousex - scene.pointerX) * this.stride;
-        const yD = (scene.pointerY - this.mousey) * this.stride;
-
-        camera.orthoTop = this.origin.z + yD;
-        camera.orthoBottom = this.origin.w + yD;
-        camera.orthoLeft = this.origin.x + xD;
-        camera.orthoRight = this.origin.y + xD;
-    }
-}
-
-class Rotate {
-    mousex: number; // from left
-    mousey: number; // from top
-    alpha: number; // original alpha
-    beta: number; // original beta
-
-    static start(scene: BABYLON.Scene, canvas: HTMLCanvasElement, camera: BABYLON.ArcRotateCamera): Rotate {
-        const rect = canvas.getBoundingClientRect();
-        const x = scene.pointerX;
-        const y = scene.pointerY;
-
-        const point = scene.pick(x, y);
-        if (!point.pickedPoint) {
-            return null;
-        }
-
-        // rotating around camera target using alpha and beta.
-        // since we want it to rotate around a _point_, the target changes, but we don't want the
-        // view to change. we exploit the ortho settings along with adjustments from where the pointer
-        // is picked (screen offsets)
-        // where the target was does not matter, only that the point is proportionally offset with the new
-        // ortho settings
-
-        const width = camera.orthoRight - camera.orthoLeft;
-        const height = camera.orthoTop - camera.orthoBottom;
-
-        const posVec = camera.position.subtract(camera.target);
-        camera.setTarget(point.pickedPoint);
-        camera.setPosition(point.pickedPoint.add(posVec));
-        camera.orthoLeft = x / rect.width * width * -1.0;
-        camera.orthoRight = camera.orthoLeft + width;
-        camera.orthoTop = y / rect.height * height;
-        camera.orthoBottom = camera.orthoTop - height;
-
-        const r = new Rotate();
-        r.mousex = x;
-        r.mousey = y;
-        r.alpha = camera.alpha;
-        r.beta = camera.beta;
-
-        return r;
-    }
-
-    doRotate(scene: BABYLON.Scene, canvas: HTMLCanvasElement, camera: BABYLON.ArcRotateCamera) {
-        // mouse x change rotates about 'z' axis. since we are in y-up land, this is rotation about y
-        // mouse y change rotates about normal to 'z'(y) and position vector
-        const rect = canvas.getBoundingClientRect();
-        // get % of mouse movement
-        const dx = (this.mousex - scene.pointerX) / rect.width;
-        const dy = (this.mousey - scene.pointerY) / rect.height;
-
-        camera.alpha = this.alpha + Math.PI * dx;
-        camera.beta = this.beta + Math.PI * dy;
     }
 }
 

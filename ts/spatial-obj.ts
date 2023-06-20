@@ -1,16 +1,7 @@
-/**
- * A reference to a loaded object in a `Viewer`.
- *
- * The main object is stored in the `Store`.
- */
-export class SpatialObject {
-  key: string;
-  status: Status = Status.Unloaded;
-  tiles: Array<number> = [];
-
-  constructor(key: string) {
-    this.key = key;
-  }
+export type SpatialObject = {
+  key: string,
+  status: Status,
+  tiles: Array<number>,
 }
 
 export enum Status {

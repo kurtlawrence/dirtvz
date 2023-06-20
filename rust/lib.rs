@@ -45,7 +45,7 @@ pub fn tile_extents(tile_idx: u32, extents: &Extents3) -> Option<Extents3> {
 
 #[inline(always)]
 fn extent_dims(extents: &Extents3) -> [u32; 2] {
-    Extents::from(*extents)
+    Extents2::from(*extents)
         .size
         .map(|x| (x / TILE_SIZE).ceil() as u32)
 }
@@ -71,9 +71,8 @@ macro_rules! wasm_bindgen_store_impl {
     };
 }
 
-/// Mirrors the structure of 'ts/data/spatial.ts'
 #[wasm_bindgen(inspectable)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Point3 {
     pub x: f64,
     pub y: f64,
@@ -105,7 +104,7 @@ impl From<Point3> for geom::Point2 {
 }
 
 #[wasm_bindgen(inspectable)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Extents3 {
     pub origin: Point3,
     pub size: Point3,
@@ -120,8 +119,58 @@ impl Extents3 {
         let Point3 { x, y, z } = self.size;
         x.max(y).max(z)
     }
+
+    /// A default extents going from zero to one in all dimensions.
+    pub fn zero_to_one() -> Self {
+        Self {
+            origin: Point3::zero(),
+            size: geom::Point3::one().into(),
+        }
+    }
+
+    /// Transforms a _render_ coordinate into a _world_ coordinate by reversing the transform.
+    ///
+    /// Note that _x,y,z_ is in Y-up, such that y/z are swapped, but the returned world coordinate
+    /// is in Z-up (so y/z will be swapped.)
+    ///
+    /// We assume that the render coordinate was initially calculated by using the extents
+    /// (since this bounds the transformation).
+    pub fn render_to_world(&self, x: f64, y: f64, z: f64) -> Point3 {
+        let scaler = self.max_dim();
+        geom::Point3::from(self.origin)
+            // note the swap to Z-up
+            .add([x, z, y].scale(scaler))
+            .into()
+    }
+
+    /// Creates an extents with the origin at _x,y,z_ and size 0.
+    pub fn from_pt(x: f64, y: f64, z: f64) -> Self {
+        Self {
+            origin: [x, y, z].into(),
+            size: Point3::zero(),
+        }
+    }
+
+    /// Expand the extents to include this point.
+    pub fn expand(&mut self, x: f64, y: f64, z: f64) {
+        use geom::Extents3 as E3;
+
+        let this = E3::from(*self);
+        let min = this.origin.min_all([x, y, z]);
+        let max = this.max().max_all([x, y, z]);
+        *self = E3::from_min_max(min, max).into();
+        console::debug_1(&format!("extents: {self:?}").into());
+    }
 }
 
+impl From<Extents3> for geom::Extents3 {
+    fn from(value: Extents3) -> Self {
+        geom::Extents3 {
+            origin: value.origin.into(),
+            size: value.size.into(),
+        }
+    }
+}
 impl From<geom::Extents3> for Extents3 {
     fn from(value: geom::Extents3) -> Self {
         let geom::Extents3 { origin, size } = value;
@@ -288,7 +337,10 @@ impl TriangleMeshSurface {
                 .origin
                 .sub(extents2.origin)
                 .xfm(extents2.size, |a, b| a.clamp(0.0, b))
-                .map(|x| (x / TILE_SIZE).ceil() as u32);
+                .map(|x| (x / TILE_SIZE).floor() as u32)
+                // we extend the lower bound down by one to catch boundary conditions
+                .map(|x| x.saturating_sub(1));
+            // note we take ceiling here and floor before
             let [maxx, maxy] = aabb
                 .max()
                 .sub(extents2.origin)
@@ -455,12 +507,8 @@ impl TileHash {
     }
 
     /// Samples the mesh within a tile at the given spacing.
-    pub fn sample(
-        &self,
-        spacing: f64,
-        tile_idx: u32,
-    ) -> Option<Vec<f32>> {
-        let tris = self.tiles.get(&tile_idx).filter(|x| !x.is_empty())?; 
+    pub fn sample(&self, spacing: f64, tile_idx: u32) -> Option<Vec<f32>> {
+        let tris = self.tiles.get(&tile_idx).filter(|x| !x.is_empty())?;
 
         let aabb = Extents2::from(tile_extents(tile_idx, &self.extents)?);
         let grid = Grid::sample_with_bounds(tris.iter().copied(), spacing, true, aabb);
@@ -476,6 +524,283 @@ impl TileHash {
                 .collect::<Vec<_>>()
                 .into()
         }
+    }
+}
+
+#[wasm_bindgen]
+pub struct ViewableTiles {
+    extents: Extents2,
+    scaler: f64,
+    dims: [u32; 2],
+    in_view: Vec<TileLod>,
+}
+
+#[wasm_bindgen]
+impl ViewableTiles {
+    pub fn new(extents: &Extents3) -> Self {
+        let dims = extent_dims(extents);
+        let scaler = extents.max_dim();
+        Self {
+            extents: Extents2::from(*extents),
+            scaler,
+            dims,
+            in_view: Vec::new(),
+        }
+    }
+
+    /// Calculate the tiles/lods in view and store them internally.
+    ///
+    /// The `viewbox_extents` is the AABB of **render space** in camera view.
+    /// The `camera_dir` is a **render space** vector of the camera view direction.
+    pub fn update(&mut self, viewbox_extents: &Extents3, camera_dir: &[f64]) {
+        // we actually do not need to move into world coordinates to work out tile indices
+        // instead, leverage that TILE_SIZE / scaler will be a tile size in render space
+        // NOTE: render space Y is Z
+        let tsize = TILE_SIZE / self.scaler;
+
+        console::debug_1(&format!("extents: {viewbox_extents:?}").into());
+
+        let extents = Extents2 {
+            origin: [viewbox_extents.origin.x, viewbox_extents.origin.z].map(|x| x as f64),
+            size: [viewbox_extents.size.x, viewbox_extents.size.z].map(|x| x as f64),
+        };
+
+        let [x, y] = extents
+            .origin
+            .map(|x| (x.clamp(0., 1.) as f64 / tsize).floor() as u32);
+        let [x_, y_] = extents
+            .max()
+            .map(|x| (x.clamp(0., 1.) as f64 / tsize))
+            .min_all(self.dims.map(|x| x as f64)) // clamp to tile dims
+            .map(|x| x.ceil() as u32);
+        console::debug_1(&format!("{x},{y}").into());
+        console::debug_1(&format!("{x_},{y_}").into());
+
+        let stride = self.dims[0];
+        self.in_view.clear();
+        self.in_view.extend(
+            (x..x_)
+                .flat_map(|x| (y..y_).map(move |y| y * stride + x))
+                .map(|tile_idx| TileLod {
+                    tile_idx,
+                    lod_res: 50.,
+                }),
+        );
+    }
+
+    pub fn in_view_tiles(&self) -> Vec<u32> {
+        self.in_view.iter().map(|x| x.tile_idx).collect()
+    }
+
+    pub fn in_view_lods(&self) -> Vec<f64> {
+        self.in_view.iter().map(|x| x.lod_res).collect()
+    }
+}
+
+struct TileLod {
+    pub tile_idx: u32,
+    pub lod_res: f64,
+}
+
+#[wasm_bindgen]
+#[derive(Default)]
+pub struct VertexData {
+    positions: Vec<f32>,
+    indices: Vec<u32>,
+    normals: Vec<f32>,
+}
+
+#[wasm_bindgen]
+impl VertexData {
+    /// Fills the component buffers of a babylonjs VertexData with a tile's meshes.
+    ///
+    /// This has quite a few semantics:
+    /// - the grid x/y's are generated on the fly (in render space)
+    ///   - (we assumes the zs are in render space)
+    /// - the buffers are filled such that we are in _Y-up_ land
+    /// - any `NaN`s are assumed nulls
+    /// - flat-shading is targeted
+    ///   - vertex points are not _shared_, which makes
+    ///   - each normal be mapped to the face
+    ///
+    /// > _Consumes `zs` in the process, so it will not be available in JS afterwards._
+    pub fn fill_vertex_data_from_tile_zs(extents: &Extents3, tile_idx: u32, zs: Vec<f32>) -> Self {
+        let build_pt = |i: usize, x: f32, y: f32| {
+            let z = zs[i];
+            // NOTE: we are working in _Y-up_ land, so z/y are swapped
+            z.is_finite().then_some([x, z, y])
+        };
+
+        let scaler = extents.max_dim();
+        let Some(tile_extents) = tile_extents(tile_idx, extents).map(Extents2::from) else { return Self::default(); };
+        let extents = Extents2::from(*extents);
+
+        // assume the tile is always square.
+        let size = (zs.len() as f64).sqrt() as usize;
+        let dsize = TILE_SIZE as f32 / (size.saturating_sub(1) as f32);
+        let dsize = dsize / scaler as f32;
+
+        // compute the tile extents in render space
+        // note that every goes from data extents zero
+        let [ox, oy] = tile_extents
+            .origin
+            .sub(extents.origin)
+            .scale(scaler.recip())
+            .map(|x| x as f32);
+
+        // if every grid cell is filled with 2 triangles
+        let max_tri_len = size.saturating_sub(1).pow(2) * 2;
+        let mut this = Self {
+            positions: Vec::with_capacity(max_tri_len * 3 * 3),
+            indices: Vec::with_capacity(max_tri_len * 3),
+            normals: Vec::with_capacity(max_tri_len * 3 * 3),
+        };
+
+        // we consider each grid cell by its lower left hand point
+        for x in 0..size.saturating_sub(1) {
+            let xl = ox + dsize * x as f32;
+            let xr = ox + dsize * (x + 1) as f32;
+
+            for y in 0..size.saturating_sub(1) {
+                let yb = oy + dsize * y as f32;
+                let yt = oy + dsize * (y + 1) as f32;
+
+                let bl = y * size + x;
+                let br = bl + 1; // +1 in x
+                let tl = (y + 1) * size + x;
+                let tr = tl + 1;
+                let x = [
+                    build_pt(bl, xl, yb),
+                    build_pt(br, xr, yb),
+                    build_pt(tl, xl, yt),
+                    build_pt(tr, xr, yt),
+                ];
+
+                match x {
+                    [Some(bl), Some(br), Some(tl), Some(tr)] => {
+                        // all four points are real, we generate 2 triangles
+                        // bl->br->tr
+                        this.add_tri([bl, br, tr]);
+                        // tr->tl->bl
+                        this.add_tri([tr, tl, bl]);
+                    }
+                    [Some(bl), Some(br), Some(tl), None] => {
+                        // tl->bl->br
+                        this.add_tri([tl, bl, br])
+                    }
+                    [Some(bl), Some(br), None, Some(tr)] => {
+                        // bl->br->tr
+                        this.add_tri([bl, br, tr])
+                    }
+                    [Some(bl), None, Some(tl), Some(tr)] => {
+                        // tr->tl->bl
+                        this.add_tri([tr, tl, bl])
+                    }
+                    [None, Some(br), Some(tl), Some(tr)] => {
+                        // br->tr->tl
+                        this.add_tri([br, tr, tl])
+                    }
+                    _ => (), // need at least 3 points to make a tri
+                }
+            }
+        }
+
+        this
+    }
+
+    /// To keep consistency with the normals, keep winding to counter-clockwise.
+    fn add_tri(&mut self, tri: [[f32; 3]; 3]) {
+        let normal = Plane::from(tri.map(|x| x.map(|x| x as f64)))
+            .normal()
+            .scale(-1.0) // rev direction
+            .unit()
+            .map(|x| x as f32);
+        let [a, b, c] = tri;
+
+        self.positions.extend(a);
+        self.indices.push(self.indices.len() as u32);
+        self.normals.extend(normal);
+
+        self.positions.extend(b);
+        self.indices.push(self.indices.len() as u32);
+        self.normals.extend(normal);
+
+        self.positions.extend(c);
+        self.indices.push(self.indices.len() as u32);
+        self.normals.extend(normal);
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.positions.is_empty() || self.indices.is_empty() || self.normals.is_empty()
+    }
+
+    pub fn positions(&self) -> Vec<f32> {
+        self.positions.clone()
+    }
+
+    pub fn indices(&self) -> Vec<u32> {
+        self.indices.clone()
+    }
+
+    pub fn normals(&self) -> Vec<f32> {
+        self.normals.clone()
+    }
+}
+
+/// The camera's view box in **render space**.
+///
+/// To build the view box, one can imagine the viewport defines 4 planes parallel to the camera
+/// direction.
+#[wasm_bindgen]
+pub struct ViewboxBuilder {
+    world: Vec<Plane>,
+    camera_dir: geom::Point3,
+    ps: Vec<geom::Point3>,
+}
+
+#[wasm_bindgen]
+impl ViewboxBuilder {
+    /// Build the initial viewbox with the world extents.
+    pub fn new(extents: &Extents3) -> Self {
+        use geom::Point3 as P;
+
+        // convert world extents into render space extents
+        let scaler = extents.max_dim();
+        let [x,y,z] = P::from(extents.size).scale(scaler.recip()); 
+        let cen = [x,z,y]; // Y-up
+
+        let world = vec![
+            Plane::new(P::zero(), [0.,0.,1.]), // xy
+            Plane::new(P::zero(), [0.,1.,0.]), // xz
+            Plane::new(P::zero(), [1.,0.,0.]), // yz
+            Plane::new(cen, [0.,0.,1.]), // xy
+            Plane::new(cen, [0.,1.,0.]), // xz
+            Plane::new(cen, [1.,0.,0.]), // yz
+        ];
+
+        Self {
+            world,
+            camera_dir: Default::default(),
+            ps: Default::default(),
+        }
+    }
+
+    /// Set the camera direction.
+    /// **In render space.**
+    pub fn set_camera_dir(&mut self, x: f64, y: f64, z: f64) {
+        self.camera_dir = [x,y,z].unit();
+    }
+
+    /// Cast a ray allow the set camera direction from _x,y,z_.
+    ///
+    /// The intersection will internally update the viewbox extents.
+    pub fn cast_ray(&mut self, x: f64, y: f64, z: f64) {
+
+    }
+
+    /// Return the viewbox extents.
+    pub fn extents(&self) -> Extents3 {
+        geom::Extents3::from_iter(self.ps.iter().copied()).into()
     }
 }
 
