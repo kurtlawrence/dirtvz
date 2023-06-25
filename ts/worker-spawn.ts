@@ -1,5 +1,7 @@
 import { EsThread } from 'threads-es/controller';
-import { WorkerApi } from './worker';
+import { WorkerApi as Wapi } from './worker';
+
+export type WorkerApi = Wapi;
 
 export async function spawn() : Promise<EsThread<WorkerApi>> {
 	return EsThread.Spawn<WorkerApi>(

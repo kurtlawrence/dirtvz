@@ -19,6 +19,8 @@
 - [ ] UI help for interactions
 - [ ] dynamic filtering tile/lod
 - [ ] apply pipeline optimisations and anti-aliasing
+- [ ] ? Load raw triangles at finest lod detail
+- [ ] world axis behaves poorly at zoom levels
 
 
 # Developing commands

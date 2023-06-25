@@ -8,8 +8,9 @@
   <body>
 	<div id="viewer"></div>
 	<script>
+    var DIRTVIS = dirtvis;
 		if (dirtvis instanceof Promise)
-		  dirtvis.then(x => x.viewerUi('viewer'));
+		  dirtvis.then(x => { DIRTVIS= x; return x.viewerUi('viewer'); });
 		else
 			dirtvis.viewerUi('viewer');
 	</script>

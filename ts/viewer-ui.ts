@@ -148,3 +148,13 @@ async function start_preprocessing_interval(app: any, store: Store, millis: numb
         });
     }, millis);
 }
+
+export async function __force_load_lod_res(lod_res: number) {
+    if (!VWR || !VWR.tiler)
+        return;
+
+    const tiles = VWR.tiler.in_view_tiles();
+
+	for (const tile of tiles)
+		await VWR.layers.update_lods_inview(tile, lod_res, VWR.extents);
+}

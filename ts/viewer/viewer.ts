@@ -1,11 +1,11 @@
 import * as BABYLON from "@babylonjs/core";
 import { Camera } from './camera';
-import { Store, Tile } from "./../store";
+import { Store } from "./../store";
 import { ViewableTiles, Extents3 } from './../wasm';
 import { Layers } from "./layers";
 import { Light } from './light';
 import { Color4, Scene } from "@babylonjs/core";
-import { SpatialObject } from "../spatial-obj";
+
 
 export class Viewer {
     canvas: HTMLCanvasElement;
@@ -17,9 +17,11 @@ export class Viewer {
     layers: Layers;
     tiler?: ViewableTiles;
     _hover: Hover;
-	_viewts?: number;
+    _viewts?: number;
+    _dirty: boolean = true;
+	extents: Extents3 = Extents3.zero_to_one();
 
-	private static TILE_LOD_TIMEOUT: number = 200; // wait before loading
+    private static TILE_LOD_TIMEOUT: number = 100; // wait before loading
 
     private constructor(canvas: HTMLCanvasElement, store: Store) {
         this.canvas = canvas;
@@ -28,7 +30,7 @@ export class Viewer {
         this.camera = new Camera(this.scene);
         this.light = new Light(this.scene, this.camera);
         this.store = store;
-        this.layers = new Layers(this.scene);
+        this.layers = new Layers(store, this.scene);
         this._hover = new Hover(this.scene);
     }
 
@@ -58,19 +60,25 @@ export class Viewer {
 
         canvas.addEventListener('pointermove', _ => { vwr._hover.pointermove() });
 
+        vwr.scene.render(); // do initial render
+
+		// render at 60 fps
+		setInterval(() => vwr.maybe_render(), 1000 / 60);
         // Render every frame
-        vwr.engine.runRenderLoop(() => {
-            vwr.scene.render();
-        });
+        // vwr.engine.runRenderLoop(() => vwr.maybe_render());
 
-        const extents = await store.extents() ?? Extents3.zero_to_one();
-        vwr.camera.zoomDataExtents(extents, canvas);
+        const extents = await store.extents();
+		if (extents) 
+		    vwr.extents = extents;
+
         vwr.init_tiler();
-        vwr._hover.extents = extents;
+        vwr._hover.extents = vwr.extents;
+        vwr.camera.onviewchg = _ => vwr.view_chgd();
+        vwr.camera.inner.update();
         vwr.camera.toggle_world_axes(canvas);
-		vwr.camera.onviewchg = _ => vwr.view_chgd();
+        vwr.camera.zoomDataExtents(vwr.extents, canvas);
 
-        vwr.set_background({ty: 'linear', colours: ['oldlace', 'dimgrey']});
+        vwr.set_background({ ty: 'linear', colours: ['oldlace', 'dimgrey'] });
 
         return vwr;
     }
@@ -81,11 +89,19 @@ export class Viewer {
             if (xs) {
                 const viewbox = this.camera.viewbox(this.canvas, xs);
                 this.tiler = ViewableTiles.new(xs);
-				this.tiler.update(viewbox.extents, new Float64Array(viewbox.view_dir.asArray()));
+                this.tiler.update(viewbox);
             }
         }
 
         return this.tiler;
+    }
+
+    private maybe_render() {
+        const needs_render = this._dirty;
+        if (needs_render) {
+            this.scene.render();
+            this._dirty = false;
+        }
     }
 
     async toggle_object(key: string) {
@@ -97,27 +113,10 @@ export class Viewer {
     }
 
     private async load_object(key: string) {
-        if (!this.tiler)
-            return;
-
-        const sobj = await this.store.find_object(key);
-        if (!sobj)
-            return;
-
-        const extents = await this.store.extents();
-        if (!extents)
-            return;
-
-        this.layers.add_loaded(key);
-
-        const viewable_tiles = this.tiler.in_view_tiles();
-        const viewable_lods = this.tiler.in_view_lods();
-
-        for (let i = 0; i < viewable_tiles.length; i++) {
-            const tile_idx = viewable_tiles[i];
-			const lod = viewable_lods[i];
-			await this.load_object_tile(sobj, tile_idx, lod, extents);
-        }
+		console.time(`loading object ${key}`);
+		await this.layers.add_surface(key, () => this._dirty = true);
+		console.timeEnd(`loading object ${key}`);
+		await this.update_in_view_tiles();
     }
 
     onhover(cb: HoverCb) {
@@ -129,110 +128,55 @@ export class Viewer {
             case 'linear':
                 this.canvas.style.background = "linear-gradient(" + bg.colours.join(',') + ")";
                 break;
-        
+
             default:
                 break;
         }
 
     }
 
-	private view_chgd() {
-		this._viewts = Date.now() + Viewer.TILE_LOD_TIMEOUT;
-		const cb = () => {
-			if (!this._viewts || Date.now() < this._viewts)
-				return;
-			this._viewts = undefined;
-			this.update_in_view_tiles();
-		};
+    private view_chgd() {
+        this._dirty = true;
+        this._viewts = Date.now() + Viewer.TILE_LOD_TIMEOUT;
+        const cb = () => {
+            if (!this._viewts || Date.now() < this._viewts)
+                return;
+            this._viewts = undefined;
+            this.update_in_view_tiles();
+        };
         setTimeout(cb, Viewer.TILE_LOD_TIMEOUT + 5); // immediate re-render
-		setTimeout(cb, 1000); // check again after a second
-	}
+        setTimeout(cb, 1000); // check again after a second
+    }
 
-	private async update_in_view_tiles() {
-		if (!this.tiler) {
-			// tiler not initialised, fire off to initialise it and return, not waiting
-			// a subsequent update will process it
-			this.init_tiler();
-			return;
-		}
+    private async update_in_view_tiles() {
+        if (!this.tiler) {
+            // tiler not initialised, fire off to initialise it and return, not waiting
+            // a subsequent update will process it
+            this.init_tiler();
+            return;
+        }
 
-		const extents = await this.store.extents();
-		if (!extents)
-			return;
+		const timeKey = `update_in_view_tiles ${Math.random()}`;
+		console.time(timeKey);
 
-		const viewbox = this.camera.viewbox(this.canvas, extents);
-		this.tiler.update(viewbox.extents, new Float64Array(viewbox.view_dir.asArray()));
+        const viewbox = this.camera.viewbox(this.canvas, this.extents);
+        this.tiler.update(viewbox);
 
         const viewable_tiles = this.tiler.in_view_tiles();
         const viewable_lods = this.tiler.in_view_lods();
-		const layers = this.layers;
-
-		console.debug(viewable_tiles);
-
-		let loaded;
 
         for (let i = 0; i < viewable_tiles.length; i++) {
             const tile_idx = viewable_tiles[i];
-			const lod_res = viewable_lods[i];
+            const lod_res = viewable_lods[i];
+			await this.layers.update_lods_inview(tile_idx, lod_res, this.extents);
+			this._dirty = true;
+		}
 
-			const tiles = layers.inview(tile_idx);
-			if (tiles) {
-				// tile already in view, check if lod idx has changed
-				for (const t of tiles) {
-					const lod = choose_lod(t.store_tile, lod_res);
-					if (lod.idx == t.lod_idx)
-						continue; // no change
-
-					const zs = await this.store.get_lod(t.objkey, tile_idx, lod.idx);
-					if (zs)
-						t.update_mesh(zs, extents);
-				}
-			} else {
-				// tile is not in view, populate with loaded objects
-				// cache the sobjs to reduce hitting the db
-				if (!loaded) {
-					loaded = [];
-				    for (const key of layers.loaded) {
-						const x = await this.store.find_object(key);
-						if (x) loaded.push(x);
-					}
-				}
-
-				for (const obj of loaded) {
-					await this.load_object_tile(obj, tile_idx, lod_res, extents);
-				}
-			}
-        }
-		
-		// lastly, remove out of view meshes
-		// do last since it does not affect viewing
-		layers.unload_out_of_view_tiles(viewable_tiles);
-	}
-
-	private async load_object_tile(obj: SpatialObject, tile_idx: number, lod_res: number, extents: Extents3) {
-            // check that object has tile
-            if (!obj.tiles.includes(tile_idx))
-                return;
-
-            const tile = await this.store.get_tile(obj.key, tile_idx);
-            if (!tile)
-                return;
-
-            const lod = choose_lod(tile, lod_res);
-            const zs = await this.store.get_lod(obj.key, tile_idx, lod.idx);
-            if (zs)
-                this.layers.add_surface_tile(obj.key, tile, lod.idx, zs, extents);
-	}
-}
-
-function choose_lod(tile: Tile, res: number) {
-    // we leverage the fact that these are ordered in _ascending resolution_.
-    // the choice is the minimum res **greater** than the request res.
-    const lods = tile.lods;
-    return lods.find(x => x.res >= res) ?? lods[lods.length - 1];
-}
-
-function update_in_view_tiles(vwr: Viewer) {
+        // do last since it does not affect viewing
+		// don't mark dirty, does not need a render
+        this.layers.update_lods_outview(viewable_tiles);
+		console.timeEnd(timeKey);
+    }
 }
 
 class Hover {

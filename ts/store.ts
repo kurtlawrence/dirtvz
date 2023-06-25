@@ -173,15 +173,31 @@ class Store {
 		return this.get<Tile>(['tile', obj, tile_idx]);
 	}
 
-	async get_lod(obj: string, tile_idx: number, lod_idx: number): Promise<Float32Array | undefined> {
-		var bytes = await this.get_bytes(['lod', obj, tile_idx, lod_idx]);
+	async get_lod(obj: string, tile: Tile, lod_idx: number): Promise<Float32Array | undefined> {
+		var bytes = await this.get_bytes(['lod', obj, tile.idx, lod_idx]);
 		if (bytes) return new Float32Array(bytes.buffer);
 		else return undefined;
+	}
+
+	async get_object_tiles(sobj: SpatialObject): Promise<Tile[]> {
+		const tiles = [];
+		const tx = this.db.transaction(STORE_NAME, 'readonly');
+		const store = tx.objectStore(STORE_NAME);
+
+		for (const tile of sobj.tiles) {
+			const x = await store.get(['tile', sobj.key, tile]);
+			if (x)
+				tiles.push(x);
+		}
+
+		await tx.done;
+
+		return tiles;
 	}
 }
 
 type Tile = {
-	lods: Array<Lod>,
+	lods: Lod[],
 	idx: number,
 }
 

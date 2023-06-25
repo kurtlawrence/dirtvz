@@ -1,6 +1,6 @@
 import * as BABYLON from "@babylonjs/core";
 import { Vector3, Scene } from "@babylonjs/core";
-import { Extents3 } from "../wasm";
+import { Extents3, Viewbox } from "../wasm";
 import { WorldAxes } from "./world-axes";
 
 // the camera draw z level
@@ -19,7 +19,6 @@ export class Camera {
     onviewchg: ViewChgd;
     world_axes?: WorldAxes;
     world_axes_cb: any;
-
 
     constructor(scene: BABYLON.Scene) {
         this.inner = new BABYLON.ArcRotateCamera('camera', 0, 0, 10, Vector3.Zero(), scene);
@@ -267,57 +266,27 @@ export class Camera {
         }
     }
 
-	/* Calculate the _render_ space extents of the view.
-		*
-		* This uses 4 screen projections from the corners of the canvas, assuming that the Z is at
-	    * the far end of the draw distance.
-		* The returned `Extents3` is in **render** space.
-		*
-		* Note that the returned extents are axis-aligned in render/world space.
-		*/
-    viewbox(canvas: HTMLCanvasElement, extents: Extents3) : Viewbox {
+    /* Calculate the _render_ space extents of the view.
+        *
+        * This uses 4 screen projections from the corners of the canvas.
+        */
+    viewbox(canvas: HTMLCanvasElement, extents: Extents3): Viewbox {
         const { width, height } = canvas.getBoundingClientRect();
-		const view_dir = this.inner.target.subtract(this.inner.position);
+        const view_dir = this.inner.target.subtract(this.inner.position);
 
-		const raybl = this.scene.createPickingRay(0, height, null, this.inner);
-		const raytr = this.scene.createPickingRay(width, 0, null, this.inner);
+        const raybl = this.scene.createPickingRay(0, height, null, this.inner);
+        const raybr = this.scene.createPickingRay(width, height, null, this.inner);
+        const raytr = this.scene.createPickingRay(width, 0, null, this.inner);
+        const raytl = this.scene.createPickingRay(0, 0, null, this.inner);
 
-		const xl = raybl.origin.x;
-		const xr = raytr.origin.x;
-		const zb = raybl.origin.z;
-		const zt = raytr.origin.z;
-		const y = raybl.origin.y;
+        const viewbox_data = view_dir.asArray().concat(
+            raybl.origin.asArray(),
+            raybr.origin.asArray(),
+            raytr.origin.asArray(),
+            raytl.origin.asArray(),
+        );
 
-		/*
-
-		const pts = [
-			new Vector3(xl, y, zb), // .addInPlace(dir.scale(DRAWZ - 1)),
-			new Vector3(xr, y, zt), // .addInPlace(dir.scale(DRAWZ - 1)),
-			// alternate corners
-			new Vector3(xl, y, zt).addInPlace(dir.scale(DRAWZ)),
-			new Vector3(xr, y, zb).addInPlace(dir.scale(DRAWZ)),
-		];
-		console.debug(pts);
-
-		const first = pts[0];
-		const extents = Extents3.from_pt(first.x, first.y, first.z);
-		for (const p of pts.slice(1)) {
-			extents.expand(p.x, p.y, p.z);
-		}
-		*/
-
-		const vbb = ViewboxBuilder.new(extents);
-		vbb.set_camera_dir(view_dir.x, view_dir.y, view_dir.z);
-
-		vbb.cast_ray(xl, y, zb);
-		vbb.cast_ray(xl, y, zt);
-		vbb.cast_ray(xr, y, zb);
-		vbb.cast_ray(xr, y, zt);
-
-		return {
-			extents: vbb.extents(),
-			view_dir
-		};
+        return Viewbox.calculate(extents, new Float64Array(viewbox_data));
     }
 }
 
@@ -426,13 +395,8 @@ class Rotate {
         camera.inner.beta = this.cap_beta + Math.PI * dy;
     }
 
-    dispose() : undefined {
+    dispose(): undefined {
         this.axes.remove();
         return undefined;
     }
 }
-
-type Viewbox = {
-	extents: Extents3,
-	view_dir: Vector3
-};
