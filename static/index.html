@@ -3,16 +3,16 @@
   <head>
     <meta charset="UTF-8">
     <title>My Rust + Webpack project!</title>
-    <script src="index.js"></script>
+    <script src="dirtvz.js"></script>
   </head>
   <body>
 	<div id="viewer"></div>
 	<script>
-    var DIRTVIS = dirtvis;
-		if (dirtvis instanceof Promise)
-		  dirtvis.then(x => { DIRTVIS= x; return x.viewerUi('viewer'); });
+    var DIRTVZ = dirtvz;
+		if (dirtvz instanceof Promise)
+		  dirtvz.then(x => { DIRTVZ= x; return x.viewerUi('viewer'); });
 		else
-			dirtvis.viewerUi('viewer');
+			dirtvz.viewerUi('viewer');
 	</script>
   </body>
 </html>

@@ -6,7 +6,7 @@ export type WorkerApi = Wapi;
 export async function spawn() : Promise<EsThread<WorkerApi>> {
 	return EsThread.Spawn<WorkerApi>(
 		// this way uses output of Webpack entry
-		new Worker('/worker.js', {type: 'module'}));
+		new Worker('/dirtvz-worker.js', {type: 'module'}));
 		// this way creates own output
 			// new URL('./worker.ts', import.meta.url), {type: 'module'}));
 }

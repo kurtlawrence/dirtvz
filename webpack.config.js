@@ -10,8 +10,9 @@ const dist = path.resolve(__dirname, "dist");
 module.exports = {
   mode: "development",
   entry: {
-    index: "./ts/index.ts",
-	  worker: './ts/worker.ts',
+    dirtvz: "./ts/index.ts",
+    "dirtvz-ui": "./ts/viewer-ui.ts",
+	"dirtvz-worker": './ts/worker.ts',
   },
   resolve: {
     extensions: [".ts", ".js"],
@@ -32,7 +33,7 @@ module.exports = {
   output: {
     path: dist,
     filename: "[name].js",
-    library: "dirtvis",
+    library: "dirtvz",
     libraryTarget: "umd",
   },
   devServer: {

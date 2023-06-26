@@ -49,7 +49,7 @@ hoverinfo toMsg =
                 |> null "world_pt" decodePoint3
                 |> null "mesh_name" D.string
             )
-            >> Result.mapError (Debug.log "Decode error")
+            -- >> Result.mapError (Debug.log "Decode error")
             >> Result.toMaybe
             >> toMsg
         )
