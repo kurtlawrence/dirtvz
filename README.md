@@ -1,8 +1,8 @@
-# dirtvz ⛰🔭
+# dirtvz 🔎⛰🔍
 
 _Web-based, high performance 3D renderer for the mining industry._
 
-- [App ⛰🔭](https://kurtlawrence.github.io/dirtvz/)
+- [App 🔎⛰🔍](https://kurtlawrence.github.io/dirtvz/)
 
 Dirtvz is an experimental web-based 3D renderer targeted specifically at the dataset common within
 the mining industry.
