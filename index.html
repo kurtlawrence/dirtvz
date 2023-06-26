@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>My Rust + Webpack project!</title>
+    <script src="dirtvz.js"></script>
+  </head>
+  <body>
+	<div id="viewer"></div>
+	<script>
+    var DIRTVZ = dirtvz;
+		if (dirtvz instanceof Promise)
+		  dirtvz.then(x => { DIRTVZ= x; return x.viewerUi('viewer'); });
+		else
+			dirtvz.viewerUi('viewer');
+	</script>
+  </body>
+</html>
