@@ -22,8 +22,8 @@ async function read_load_and_store_from_spatial_file(db_name: string, file: File
 }
 
 async function preprocess_spatial_object(db_name: string, objkey: string) {
-	let db = await Store.connect(db_name);
-	let mesh = await db.get_object(objkey);
+	const db = await Store.connect(db_name);
+	const mesh = await db.get_object(objkey);
 	if (!mesh)
 		return;
 
@@ -38,16 +38,10 @@ async function preprocess_spatial_object(db_name: string, objkey: string) {
 	let tiles = hash.tiles();
 	console.timeEnd('generating tiles hash');
 
-	let lods = [50, 25, 10, 5, 2, 1, 0.5];
-
-	for (let idx = 0; idx < lods.length; idx++) {
-		const lod = lods[idx];
-		for (const tile_idx of tiles) {
-			let zs = hash.sample(lod, tile_idx);
-			if (zs) {
-				await db.store_lod(objkey, tile_idx, idx, lod, zs);
-			}
-		}
+	for (const tile_idx of tiles) {
+		let zs = hash.sample(tile_idx);
+		if (zs)
+		    await db.store_tile(objkey, tile_idx, zs);
 	}
 }
 

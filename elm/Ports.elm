@@ -11,6 +11,8 @@ type alias HoverInfo =
     , renderPt : Maybe Point3
     , worldPt : Maybe Point3
     , meshName : Maybe String
+    , tileId : Maybe Int
+    , lodRes : Maybe Float
     }
 
 
@@ -48,8 +50,9 @@ hoverinfo toMsg =
                 |> null "render_pt" decodePoint3
                 |> null "world_pt" decodePoint3
                 |> null "mesh_name" D.string
+                |> null "tile_id" D.int
+                |> null "lod_res" D.float
             )
-            -- >> Result.mapError (Debug.log "Decode error")
             >> Result.toMaybe
             >> toMsg
         )

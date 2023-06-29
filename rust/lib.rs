@@ -1,3 +1,9 @@
+#[cfg(test)]
+extern crate quickcheck;
+#[cfg(test)]
+#[macro_use(quickcheck)]
+extern crate quickcheck_macros;
+
 use geom::*;
 use rustc_hash::FxHashMap as HashMap;
 use wasm_bindgen::prelude::*;
@@ -14,40 +20,29 @@ extern "C" {
     fn alert(s: &str);
 }
 
-#[wasm_bindgen]
-pub fn greet() {
-    alert("Hello!");
+#[cfg(feature = "err-capture")]
+fn init_panic_hook() {
+    console_error_panic_hook::set_once();
 }
+#[cfg(not(feature = "err-capture"))]
+fn init_panic_hook() {}
 
-const TILE_SIZE: f64 = 200.;
+const LODS: [f64; 7] = [32.0, 16.0, 8.0, 4.0, 2.0, 1.0, 0.5];
 
-#[wasm_bindgen]
-pub fn tile_extents(tile_idx: u32, extents: &Extents3) -> Option<Extents3> {
-    let [dx, dy] = extent_dims(extents);
-    let extents = Extents2::from(*extents);
+const COUNT: usize = 128;
 
-    if tile_idx >= dx * dy {
-        None
-    } else {
-        let origin = [tile_idx % dx, tile_idx / dx]
-            .map(|x| x as f64)
-            .scale(TILE_SIZE)
-            .add(extents.origin);
-        Some(
-            Extents2 {
-                origin,
-                size: Point2::all(TILE_SIZE),
-            }
-            .into(),
-        )
-    }
+const MAX_DEPTH: u8 = LODS.len().saturating_sub(1) as u8;
+
+#[inline(always)]
+fn tile_size(depth: usize) -> f64 {
+    LODS[depth] * COUNT.saturating_sub(1) as f64
 }
 
 #[inline(always)]
-fn extent_dims(extents: &Extents3) -> [u32; 2] {
+fn extent_dims(extents: &Extents3) -> [u16; 2] {
     Extents2::from(*extents)
         .size
-        .map(|x| (x / TILE_SIZE).ceil() as u32)
+        .map(|x| (x / tile_size(0)).ceil() as u16)
 }
 
 trait Store {
@@ -274,10 +269,10 @@ impl TriangleMeshSurface {
             .into()
     }
 
-    /// Fills `self` by deserializing a vulcan 00t triangulation.
-    ///
-    /// If this fails, `self` is unchanged.
+    /// Deserialise a Vulcan 00t triangulation.
     pub fn from_vulcan_00t(data: &[u8]) -> Result<TriangleMeshSurface, String> {
+        init_panic_hook();
+
         let tri = geom::io::trimesh::from_vulcan_00t(data).map_err(|e| e.to_string())?;
         let translate = tri.aabb().origin;
         let (points, indices) = tri.decompose();
@@ -299,59 +294,65 @@ impl TriangleMeshSurface {
         })
     }
 
-    /// Given the data `extents`, returns a list of tile indices that intersect the mesh's
-    /// AABB.
-    ///
-    /// Note that the _mesh_ might not intersect the tile, but it's AABB does.
-    pub fn tiles(&self, extents: &Extents3) -> Vec<u32> {
-        let aabb = geom::Extents2::from(self.aabb());
-
-        (0u32..)
-            .map(|idx| (idx, tile_extents(idx, extents)))
-            .take_while(|(_, x)| x.is_some())
-            .filter_map(|(idx, e)| {
-                e.is_some_and(|e| aabb.intersects(Extents2::from(e)))
-                    .then_some(idx)
-            })
-            .collect()
-    }
-
     pub fn generate_tiles_hash(&self, extents: &Extents3) -> TileHash {
-        // the goal here is to loop through the triangles **once**.
-        // each triangle's aabb can give use the intersecting tile indices we need to add to
+        init_panic_hook();
+        // the goal here is to minimise intersection testing.
+        // there are a few observations:
+        // - looping through the triangles is the best filter, since we can quickly narrow
+        //   down the tile space
+        // - a triangle's aabb within a given root tile can give the **leaf** points that
+        //   it overlaps, thie is easily achieved with some index math
+        // - each _parent_ of the leaf would get added as well
 
-        let [dx, _] = extent_dims(extents);
-        let extents = *extents;
-        let extents2 = Extents2::from(extents);
+        let tris = self.tris().collect::<Vec<_>>();
+        let mut tiles: HashMap<u32, Vec<usize>> = HashMap::default();
+        let roots = TileId::roots(extents);
 
-        let mut tiles: HashMap<u32, Vec<_>> = HashMap::default();
+        let mut buf = Vec::new();
 
-        for tri in self.tris() {
+        for (idx, tri) in tris.iter().copied().enumerate() {
             let aabb = Extents2::from(tri.aabb());
-            if !aabb.intersects(extents2) {
-                continue;
+
+            buf.clear();
+
+            for root in &roots {
+                let xs = root.extents(extents);
+                let Some(mut int) = aabb.intersection(xs) else { continue; };
+
+                // the size will be valid, the origin is now wrt the tile extents
+                int.origin = int.origin.sub(xs.origin);
+
+                let res = tile_size(MAX_DEPTH as usize);
+
+                // find the indices that the triangle overlaps
+                let [x, y] = int.origin.scale(res.recip()).map(|x| x.floor() as u8);
+                let [x_, y_] = int.max().scale(res.recip()).map(|x| x.ceil() as u8);
+
+                for x in x..x_ {
+                    for y in y..y_ {
+                        let mut t = TileId::from_leaf_index(x, y);
+                        t.root = root.root;
+                        buf.push(t);
+                        while let Some(p) = t.parent() {
+                            buf.push(p);
+                            t = p;
+                        }
+                    }
+                }
             }
 
-            let [minx, miny] = aabb
-                .origin
-                .sub(extents2.origin)
-                .xfm(extents2.size, |a, b| a.clamp(0.0, b))
-                .map(|x| (x / TILE_SIZE).floor() as u32)
-                // we extend the lower bound down by one to catch boundary conditions
-                .map(|x| x.saturating_sub(1));
-            // note we take ceiling here and floor before
-            let [maxx, maxy] = aabb
-                .max()
-                .sub(extents2.origin)
-                .xfm(extents2.size, |a, b| a.clamp(0.0, b))
-                .map(|x| (x / TILE_SIZE).ceil() as u32);
-
-            for idx in (minx..=maxx).flat_map(|x| (miny..=maxy).map(move |y| dx * y + x)) {
-                tiles.entry(idx).or_default().push(tri);
+            buf.sort_unstable();
+            buf.dedup();
+            for t in &buf {
+                tiles.entry(t.as_num()).or_default().push(idx);
             }
         }
 
-        TileHash { tiles, extents }
+        TileHash {
+            tris,
+            tiles,
+            extents: *extents,
+        }
     }
 }
 
@@ -495,7 +496,8 @@ impl<'a> StoreDecoder<'a> {
 
 #[wasm_bindgen]
 pub struct TileHash {
-    tiles: HashMap<u32, Vec<Tri>>,
+    tris: Vec<Tri>,
+    tiles: HashMap<u32, Vec<usize>>,
     extents: Extents3,
 }
 
@@ -506,42 +508,212 @@ impl TileHash {
     }
 
     /// Samples the mesh within a tile at the given spacing.
-    pub fn sample(&self, spacing: f64, tile_idx: u32) -> Option<Vec<f32>> {
+    pub fn sample(&self, tile_idx: u32) -> Option<Vec<f32>> {
+        init_panic_hook();
+
         let tris = self.tiles.get(&tile_idx).filter(|x| !x.is_empty())?;
 
-        let aabb = Extents2::from(tile_extents(tile_idx, &self.extents)?);
-        let grid = Grid::sample_with_bounds(tris.iter().copied(), spacing, true, aabb);
+        let tileid = TileId::from_num(tile_idx);
+        let aabb = tileid.extents(&self.extents);
+        {
+            // we cheat a shrink the size a tiny amount to get exactly 128^2 pts
+            let x = tileid.extents(&self.extents);
+            Extents2 {
+                size: x.size.sub(Point2::all(0.001)),
+                ..x
+            }
+        };
+        let spacing = tileid.lod_res();
+        let grid = Grid::sample_with_bounds(
+            tris.iter().copied().map(|x| self.tris[x]),
+            spacing,
+            true,
+            aabb,
+        );
 
-        if grid.is_blank() {
+        (!grid.is_blank()).then_some(())?; // exit if empty
+
+        assert_eq!(grid.len(), COUNT.pow(2));
+
+        let scaler = self.extents.max_dim();
+        let z = self.extents.origin.z;
+        grid.into_zs()
+            .into_iter()
+            .map(|x| x.map(|x| ((x - z) / scaler) as f32).unwrap_or(f32::NAN))
+            .collect::<Vec<_>>()
+            .into()
+    }
+}
+
+#[wasm_bindgen]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TileId {
+    /// The index into the tessellated lowest LOD array.
+    root: u16,
+    /// The path of the nested quadtree tiles.
+    ///
+    /// The first 3 bits are used to describe the depth.
+    /// The remaining bits are used to describe the path.
+    path: u16,
+}
+
+#[wasm_bindgen]
+impl TileId {
+    /// This tile a 'root' tile in the tessellating grid.
+    pub fn is_root(id: u32) -> bool {
+        Self::from_num(id).is_root_()
+    }
+
+    /// This tile a 'root' tile in the tessellating grid.
+    pub fn is_root_(&self) -> bool {
+        self.lod_lvl() == 0
+    }
+
+    /// This tile is at the deepest nesting level.
+    pub fn is_max(id: u32) -> bool {
+        Self::from_num(id).is_max_()
+    }
+
+    /// This tile is at the deepest nesting level.
+    pub fn is_max_(&self) -> bool {
+        self.lod_lvl() == MAX_DEPTH
+    }
+
+    /// Returns the root tiles in that tessellate over the extents.
+    fn roots(extents: &Extents3) -> Vec<Self> {
+        let [x, y] = extent_dims(extents);
+        (0..x * y).map(|root| TileId { root, path: 0 }).collect()
+    }
+
+    /// Represent this id as a single number.
+    pub fn as_num(&self) -> u32 {
+        ((self.root as u32) << 16) | self.path as u32
+    }
+
+    pub fn from_num(n: u32) -> Self {
+        let root = (n >> 16) as u16;
+        let path = (n & (u16::MAX as u32)) as u16;
+        Self { root, path }
+    }
+
+    pub fn lod_res(&self) -> f64 {
+        LODS[self.lod_lvl() as usize]
+    }
+
+    pub fn lod_lvl(&self) -> u8 {
+        (self.path >> 13) as u8
+    }
+
+    fn extents(&self, world: &Extents3) -> Extents2 {
+        let TileId { root, path: _ } = *self;
+        let [dx, dy] = extent_dims(world);
+        let extents = Extents2::from(*world);
+
+        if root > dx * dy {
+            Extents2::zero()
+        } else {
+            let origin = [root % dx, root / dx]
+                .map(|x| x as f64)
+                .scale(tile_size(0))
+                .add(extents.origin)
+                .add(self.ovec());
+
+            Extents2 {
+                origin,
+                size: Point2::all(tile_size(self.lod_lvl().into())),
+            }
+        }
+    }
+
+    /// Return a path iterator.
+    fn path_iter(&self) -> impl ExactSizeIterator<Item = [bool; 2]> {
+        let mut x = self.path << 3;
+        (0..self.lod_lvl()).map(move |_| {
+            let y = x >> 14;
+            x = x << 2;
+            match y {
+                0b00 => [false, false],
+                0b01 => [false, true],
+                0b10 => [true, false],
+                0b11 => [true, true],
+                _ => unreachable!("should only have 2 bits"),
+            }
+        })
+    }
+
+    /// This is the vector from the root tile's origin to the tile origin.
+    fn ovec(&self) -> Point2 {
+        self.path_iter()
+            .enumerate()
+            .fold(Point2::zero(), |p, (i, x)| {
+                p.add(x.map(|x| u8::from(x) as f64 * tile_size(i + 1)))
+            })
+    }
+
+    fn parent(&self) -> Option<Self> {
+        if self.is_root_() {
             None
         } else {
-            let scaler = self.extents.max_dim();
-            let z = self.extents.origin.z;
-            grid.into_zs()
-                .into_iter()
-                .map(|x| x.map(|x| ((x - z) / scaler) as f32).unwrap_or(f32::NAN))
-                .collect::<Vec<_>>()
-                .into()
+            let d = 15 - (self.lod_lvl() * 2);
+            let l = (self.lod_lvl() as u16 - 1) << 13;
+            let path = ((((self.path << 3) >> 3) | l) >> d) << d;
+            Some(Self {
+                path,
+                root: self.root,
+            })
         }
+    }
+
+    fn children(&self) -> [Self; 4] {
+        let d = self.lod_lvl() as u16;
+        let d_ = (d + 1) << 13;
+        let TileId { root, path } = *self;
+        let f = |n: u16| {
+            let path = ((path << 3) >> 3 | d_) | (n << (11 - d * 2));
+            Self { root, path }
+        };
+
+        [f(0b00), f(0b01), f(0b10), f(0b11)]
+    }
+
+    /// This generates a _leaf_ tile from the index with respect to the root tile's origin.
+    ///
+    /// We can leverage the fact that the indices use powers of 2, so each bit describes
+    /// the step in that dimension.
+    /// We just need to interleave the x/y together, and we address the depth and padding.
+    ///
+    /// We can use Morton encoding for this.
+    fn from_leaf_index(x: u8, y: u8) -> Self {
+        let x = x as u16;
+        let y = y as u16;
+
+        let mut path = 0u16;
+        for i in 0..MAX_DEPTH {
+            let t = (y & 1 << i) << i | (x & 1 << i) << (i + 1);
+            path = path | t;
+        }
+
+        path = path << 1; // pad
+        path = path | 0b110_0000_0000_0000_0; // prefix depth
+
+        Self { root: 0, path }
     }
 }
 
 #[wasm_bindgen]
 pub struct ViewableTiles {
-    scaler: f64,
-    dims: [u32; 2],
-    in_view: Vec<TileLod>,
+    extents: Extents3,
+    in_view: Vec<u32>,
+    out_view: Vec<u32>,
 }
 
 #[wasm_bindgen]
 impl ViewableTiles {
     pub fn new(extents: &Extents3) -> Self {
-        let dims = extent_dims(extents);
-        let scaler = extents.max_dim();
         Self {
-            scaler,
-            dims,
+            extents: *extents,
             in_view: Vec::new(),
+            out_view: Vec::new(),
         }
     }
 
@@ -550,49 +722,60 @@ impl ViewableTiles {
     /// The `viewbox_extents` is the AABB of **render space** in camera view.
     /// The `camera_dir` is a **render space** vector of the camera view direction.
     pub fn update(&mut self, viewbox: &Viewbox) {
-        // we actually do not need to move into world coordinates to work out tile indices
-        // instead, leverage that TILE_SIZE / scaler will be a tile size in render space
-        // NOTE: render space Y is Z
-        let tsize = TILE_SIZE / self.scaler;
+        let world = &self.extents;
+        let scaler = world.max_dim();
 
         // LOD resolution
         // world area
-        let area = viewbox.render_area * self.scaler * self.scaler;
-        // console::debug_1(&format!("{area:.0}").into());
-        let lod_res = area.powf(0.5) / 400.0;
+        let area = viewbox.render_area * scaler * scaler;
+        // console::debug_1(&format!("area {area:.0} | ha {:.0}", area / 10_000.0).into());
+        let lod_res = (area / 10_000.0).powf(0.5) / 2.0;
+        let lod_depth = choose_lod_depth(lod_res) as u8;
 
-        let extents = Extents2::from_iter(viewbox.min_ps.into_iter().chain(viewbox.max_ps));
-
-        let [x, y] = extents
-            .origin
-            .map(|x| (x.clamp(0., 1.) as f64 / tsize).floor() as u32);
-        let [x_, y_] = extents
-            .max()
-            .map(|x| (x.clamp(0., 1.) as f64 / tsize))
-            .min_all(self.dims.map(|x| x as f64)) // clamp to tile dims
-            .map(|x| x.ceil() as u32);
-
-        let stride = self.dims[0];
-        self.in_view.clear();
-        self.in_view.extend(
-            (x..x_)
-                .flat_map(|x| (y..y_).map(move |y| y * stride + x))
-                .map(|tile_idx| TileLod { tile_idx, lod_res }),
+        let extents = Extents2::from_iter(
+            viewbox
+                .min_ps
+                .into_iter()
+                .chain(viewbox.max_ps)
+                .map(|p| p.scale(scaler).add(world.origin.into())),
         );
+
+        let mut stack = TileId::roots(world);
+        self.in_view.clear();
+        self.out_view.clear();
+
+        while let Some(t) = stack.pop() {
+            let ints = t.extents(world).intersects(extents);
+            let at_depth = t.lod_lvl() == lod_depth;
+
+            if ints && at_depth {
+                // simply push this tile into view
+                self.in_view.push(t.as_num());
+            } else if ints {
+                // push the child nodes onto the stack
+                stack.extend(t.children());
+            } else {
+                // does not intersect, we add as an out of view
+                // note that this would be at the lowest LOD without overlap of inview
+                self.out_view.push(t.as_num());
+            }
+        }
     }
 
     pub fn in_view_tiles(&self) -> Vec<u32> {
-        self.in_view.iter().map(|x| x.tile_idx).collect()
+        self.in_view.clone()
     }
 
-    pub fn in_view_lods(&self) -> Vec<f64> {
-        self.in_view.iter().map(|x| x.lod_res).collect()
+    pub fn out_view_tiles(&self) -> Vec<u32> {
+        self.out_view.clone()
     }
 }
 
-struct TileLod {
-    pub tile_idx: u32,
-    pub lod_res: f64,
+fn choose_lod_depth(resolution: f64) -> usize {
+    LODS.into_iter()
+        .enumerate()
+        .find_map(|(i, res)| (resolution > res).then_some(i))
+        .unwrap_or(LODS.len() - 1)
 }
 
 #[wasm_bindgen]
@@ -621,12 +804,14 @@ impl VertexData {
         tile_idx: u32,
         zs: Vec<f32>,
     ) -> Self {
-        let zs_len = zs.len();
-        let size = Self::calc_tile_size(zs_len);
-        let pts = Self::build_points(extents, tile_idx, zs);
+        init_panic_hook();
+
+        let tile = TileId::from_num(tile_idx);
+
+        let pts = Self::build_points(extents, tile, zs);
 
         // if every grid cell is filled with 2 triangles
-        let max_tri_len = size.saturating_sub(1).pow(2) * 2;
+        let max_tri_len = COUNT.pow(2) * 2;
         let mut this = Self {
             positions: pts
                 .iter()
@@ -643,19 +828,12 @@ impl VertexData {
         this
     }
 
-    fn calc_tile_size(zs_len: usize) -> usize {
-        // assume the tile is always square.
-        (zs_len as f64).sqrt() as usize
-    }
-
-    fn build_points(extents: &Extents3, tile_idx: u32, zs: Vec<f32>) -> VertexDataPts {
+    fn build_points(extents: &Extents3, tile: TileId, zs: Vec<f32>) -> VertexDataPts {
         let scaler = extents.max_dim();
-        let Some(tile_extents) = tile_extents(tile_idx, extents).map(Extents2::from) else { return Default::default(); };
+        let tile_extents = tile.extents(extents);
         let extents = Extents2::from(*extents);
 
-        let size = Self::calc_tile_size(zs.len());
-        let dsize = TILE_SIZE / (size.saturating_sub(1) as f64);
-        let dsize = dsize / scaler;
+        let dsize = tile.lod_res() / scaler;
 
         // compute the tile extents in render space
         // note that every goes from data extents zero
@@ -667,10 +845,12 @@ impl VertexData {
         // build a list of indices to points -- note x order
         let mut i = 0;
         let mut pts = Vec::with_capacity(zs.len());
-        for y in 0..size {
+        let stride = COUNT;
+        assert_eq!(zs.len(), stride.pow(2));
+        for y in 0..stride {
             let py = oy + dsize * y as f64;
-            for x in 0..size {
-                let z = zs[y * size + x];
+            for x in 0..stride {
+                let z = zs[y * stride + x];
                 let p = z.is_finite().then(|| {
                     // capture and increment counter
                     let idx = i;
@@ -687,14 +867,15 @@ impl VertexData {
     }
 
     fn add_indices_smooth(&mut self, pts: &VertexDataPts) {
-        let size = Self::calc_tile_size(pts.len());
+        let stride = COUNT;
+        let size = stride - 1;
 
         // we consider each grid cell by its lower left hand point
-        for y in 0..size.saturating_sub(1) {
-            for x in 0..size.saturating_sub(1) {
-                let bl = y * size + x;
+        for y in 0..size {
+            for x in 0..size {
+                let bl = y * stride + x;
                 let br = bl + 1; // +1 in x
-                let tl = (y + 1) * size + x;
+                let tl = (y + 1) * stride + x;
                 let tr = tl + 1;
                 let x = [pts[bl], pts[br], pts[tl], pts[tr]].map(|x| x.map(|x| x.0));
 
@@ -751,118 +932,6 @@ impl VertexData {
             .into_iter()
             .flat_map(|x| x.unit().map(|x| x as f32))
             .collect();
-    }
-
-    /// Similar to `fill_vertex_data_from_tile_zs_smooth` except we use a 'flat' shading which
-    /// means positions are duplicated and each facet gets a normal (rather than each vertex).
-    pub fn fill_vertex_data_from_tile_zs_flat(
-        extents: &Extents3,
-        tile_idx: u32,
-        zs: Vec<f32>,
-    ) -> Self {
-        let build_pt = |i: usize, x: f32, y: f32| {
-            let z = zs[i];
-            // NOTE: we are working in _Y-up_ land, so z/y are swapped
-            z.is_finite().then_some([x, z, y])
-        };
-
-        let scaler = extents.max_dim();
-        let Some(tile_extents) = tile_extents(tile_idx, extents).map(Extents2::from) else { return Self::default(); };
-        let extents = Extents2::from(*extents);
-
-        // assume the tile is always square.
-        let size = (zs.len() as f64).sqrt() as usize;
-        let dsize = TILE_SIZE as f32 / (size.saturating_sub(1) as f32);
-        let dsize = dsize / scaler as f32;
-
-        // compute the tile extents in render space
-        // note that every goes from data extents zero
-        let [ox, oy] = tile_extents
-            .origin
-            .sub(extents.origin)
-            .scale(scaler.recip())
-            .map(|x| x as f32);
-
-        // if every grid cell is filled with 2 triangles
-        let max_tri_len = size.saturating_sub(1).pow(2) * 2;
-        let mut this = Self {
-            positions: Vec::with_capacity(max_tri_len * 3 * 3),
-            indices: Vec::with_capacity(max_tri_len * 3),
-            normals: Vec::with_capacity(max_tri_len * 3 * 3),
-        };
-
-        // we consider each grid cell by its lower left hand point
-        for x in 0..size.saturating_sub(1) {
-            let xl = ox + dsize * x as f32;
-            let xr = ox + dsize * (x + 1) as f32;
-
-            for y in 0..size.saturating_sub(1) {
-                let yb = oy + dsize * y as f32;
-                let yt = oy + dsize * (y + 1) as f32;
-
-                let bl = y * size + x;
-                let br = bl + 1; // +1 in x
-                let tl = (y + 1) * size + x;
-                let tr = tl + 1;
-                let x = [
-                    build_pt(bl, xl, yb),
-                    build_pt(br, xr, yb),
-                    build_pt(tl, xl, yt),
-                    build_pt(tr, xr, yt),
-                ];
-
-                match x {
-                    [Some(bl), Some(br), Some(tl), Some(tr)] => {
-                        // all four points are real, we generate 2 triangles
-                        // bl->br->tr
-                        this.add_tri_flat([bl, br, tr]);
-                        // tr->tl->bl
-                        this.add_tri_flat([tr, tl, bl]);
-                    }
-                    [Some(bl), Some(br), Some(tl), None] => {
-                        // tl->bl->br
-                        this.add_tri_flat([tl, bl, br])
-                    }
-                    [Some(bl), Some(br), None, Some(tr)] => {
-                        // bl->br->tr
-                        this.add_tri_flat([bl, br, tr])
-                    }
-                    [Some(bl), None, Some(tl), Some(tr)] => {
-                        // tr->tl->bl
-                        this.add_tri_flat([tr, tl, bl])
-                    }
-                    [None, Some(br), Some(tl), Some(tr)] => {
-                        // br->tr->tl
-                        this.add_tri_flat([br, tr, tl])
-                    }
-                    _ => (), // need at least 3 points to make a tri
-                }
-            }
-        }
-
-        this
-    }
-
-    /// To keep consistency with the normals, keep winding to counter-clockwise.
-    fn add_tri_flat(&mut self, tri: [[f32; 3]; 3]) {
-        let normal = Plane::from(tri.map(|x| x.map(|x| x as f64)))
-            .normal()
-            .scale(-1.0) // rev direction
-            .unit()
-            .map(|x| x as f32);
-        let [a, b, c] = tri;
-
-        self.positions.extend(a);
-        self.indices.push(self.indices.len() as u32);
-        self.normals.extend(normal);
-
-        self.positions.extend(b);
-        self.indices.push(self.indices.len() as u32);
-        self.normals.extend(normal);
-
-        self.positions.extend(c);
-        self.indices.push(self.indices.len() as u32);
-        self.normals.extend(normal);
     }
 
     pub fn is_empty(&self) -> bool {
@@ -967,5 +1036,159 @@ mod tests {
                 [[1., 2., 3.], [1., 3., 3.], [2., 3., 4.]]
             ]
         )
+    }
+
+    #[test]
+    fn assert_tile_sizing() {
+        assert_eq!(tile_size(0), 4096.0);
+        assert_eq!(tile_size(1), 2048.0);
+        assert_eq!(tile_size(2), 1024.0);
+        assert_eq!(tile_size(3), 512.0);
+        assert_eq!(tile_size(4), 256.0);
+        assert_eq!(tile_size(5), 128.0);
+        assert_eq!(tile_size(6), 64.0);
+    }
+
+    #[test]
+    fn lod_lvl_testing() {
+        let f = |path: u16| {
+            let x = TileId { root: 0, path };
+            (x.lod_lvl(), x.lod_res())
+        };
+
+        assert_eq!(f(0b000_0000_0000_0000_0), (0, 32.0));
+        assert_eq!(f(0b001_0000_0000_0000_0), (1, 16.0));
+        assert_eq!(f(0b010_0000_0000_0000_0), (2, 8.0));
+        assert_eq!(f(0b011_0000_0000_0000_0), (3, 4.0));
+        assert_eq!(f(0b100_0000_0000_0000_0), (4, 2.0));
+        assert_eq!(f(0b101_0000_0000_0000_0), (5, 1.0));
+        assert_eq!(f(0b110_0000_0000_0000_0), (6, 0.5));
+    }
+
+    #[test]
+    fn path_iter_testing() {
+        let p = |path: u16| TileId { root: 0, path }.path_iter().collect::<Vec<_>>();
+
+        assert_eq!(p(0b000_0000_0000_0000_0), Vec::<[bool; 2]>::new());
+        assert_eq!(p(0b001_0000_0000_0000_0), vec![[false, false]]);
+        assert_eq!(p(0b001_1100_0000_0000_0), vec![[true, true]]);
+        assert_eq!(p(0b001_1000_0000_0000_0), vec![[true, false]]);
+        assert_eq!(
+            p(0b110_1001_1100_0110_0),
+            vec![
+                [true, false],
+                [false, true],
+                [true, true],
+                [false, false],
+                [false, true],
+                [true, false]
+            ]
+        );
+    }
+
+    #[test]
+    fn ovec_testing() {
+        let p = |path: u16| TileId { root: 0, path }.ovec();
+
+        assert_eq!(p(0b000_0000_0000_0000_0), [0.0, 0.0]);
+        assert_eq!(p(0b001_0000_0000_0000_0), [0.0, 0.0]);
+        assert_eq!(p(0b001_1100_0000_0000_0), [2048.0, 2048.0]);
+        assert_eq!(p(0b001_1000_0000_0000_0), [2048.0, 0.0]);
+        assert_eq!(p(0b110_1001_1100_0110_0), [2624.0, 1664.0]);
+    }
+
+    #[quickcheck]
+    fn tileid_to_from_num_fuzz(root: u16, path: u16) -> bool {
+        let id = TileId { root, path };
+        TileId::from_num(id.as_num()) == id
+    }
+
+    #[test]
+    fn choose_lod_depth_testing() {
+        assert_eq!(choose_lod_depth(50.0), 0); // 32   res
+        assert_eq!(choose_lod_depth(30.0), 1); // 16   res
+        assert_eq!(choose_lod_depth(15.0), 2); //  8   res
+        assert_eq!(choose_lod_depth(6.0), 3); //  4   res
+        assert_eq!(choose_lod_depth(3.0), 4); //  2   res
+        assert_eq!(choose_lod_depth(1.5), 5); //  1   res
+        assert_eq!(choose_lod_depth(0.7), 6); //  0.5 res
+        assert_eq!(choose_lod_depth(0.1), 6); //  0.5 res
+    }
+
+    #[test]
+    fn children_testing() {
+        let f = |path: u16| TileId { root: 0, path }.children().map(|x| x.path);
+        assert_eq!(
+            f(0b000_0000_0000_0000_0),
+            [
+                0b001_0000_0000_0000_0,
+                0b001_0100_0000_0000_0,
+                0b001_1000_0000_0000_0,
+                0b001_1100_0000_0000_0,
+            ]
+        );
+        assert_eq!(
+            f(0b011_0110_0100_0000_0),
+            [
+                0b100_0110_0100_0000_0,
+                0b100_0110_0101_0000_0,
+                0b100_0110_0110_0000_0,
+                0b100_0110_0111_0000_0,
+            ]
+        );
+    }
+
+    #[test]
+    fn roots_and_maxs() {
+        let f = |path: u16| {
+            let x = TileId { root: 0, path };
+            (x.is_root_(), x.is_max_())
+        };
+
+        assert_eq!(f(0b000_0000_0000_0000_0), (true, false));
+        assert_eq!(f(0b001_0000_0000_0000_0), (false, false));
+        assert_eq!(f(0b010_0000_0000_0000_0), (false, false));
+        assert_eq!(f(0b011_0000_0000_0000_0), (false, false));
+        assert_eq!(f(0b100_0000_0000_0000_0), (false, false));
+        assert_eq!(f(0b101_0000_0000_0000_0), (false, false));
+        assert_eq!(f(0b110_0000_0000_0000_0), (false, true));
+    }
+
+    #[test]
+    fn leaf_index_to_tileid() {
+        let f = |x, y| {
+            let x = TileId::from_leaf_index(x, y).path;
+            eprintln!("{x:b}");
+            x
+        };
+
+        assert_eq!(f(0, 0), 0b110_0000_0000_0000_0);
+        assert_eq!(f(63, 63), 0b110_1111_1111_1111_0);
+        assert_eq!(f(63, 0), 0b110_1010_1010_1010_0);
+        assert_eq!(f(0, 63), 0b110_0101_0101_0101_0);
+        assert_eq!(f(0b1110, 31), 0b110_0001_1111_1101_0);
+    }
+
+    #[test]
+    fn parent_testing() {
+        let x = TileId {
+            root: 1,
+            path: 0b110_1111_1111_1111_0,
+        };
+
+        let x = x.parent().unwrap();
+        assert_eq!(x.path, 0b101_1111_1111_1100_0);
+        let x = x.parent().unwrap();
+        assert_eq!(x.path, 0b100_1111_1111_0000_0);
+        let x = x.parent().unwrap();
+        assert_eq!(x.path, 0b011_1111_1100_0000_0);
+        let x = x.parent().unwrap();
+        assert_eq!(x.path, 0b010_1111_0000_0000_0);
+        let x = x.parent().unwrap();
+        assert_eq!(x.path, 0b001_1100_0000_0000_0);
+        let x = x.parent().unwrap();
+        assert_eq!(x.path, 0b000_0000_0000_0000_0);
+        let x = x.parent();
+        assert_eq!(x, None);
     }
 }

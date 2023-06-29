@@ -163,7 +163,11 @@ objectListView =
 
 
 hoverInfoView : HoverInfo -> Html
-hoverInfoView { pointerx, pointery, renderPt, worldPt, meshName } =
+hoverInfoView info =
+    let
+        { pointerx, pointery, renderPt, worldPt } =
+            info
+    in
     div []
         [ hr [] []
         , div [] [ text <| "screen coordinates: (" ++ String.fromInt pointerx ++ "," ++ String.fromInt pointery ++ ")" ]
@@ -181,13 +185,7 @@ hoverInfoView { pointerx, pointery, renderPt, worldPt, meshName } =
 
                 Nothing ->
                     []
-        , div [] <|
-            case meshName of
-                Just n ->
-                    [ text <| "closest mesh: " ++ decomposeMeshName n ]
-
-                Nothing ->
-                    []
+        , div [] [ text <| decomposeMeshInfo info ]
         , hr [] []
         ]
 
@@ -196,16 +194,15 @@ p3toString { x, y, z } =
     "(" ++ String.fromFloat x ++ "," ++ String.fromFloat y ++ "," ++ String.fromFloat z ++ ")"
 
 
-decomposeMeshName n =
-    case String.reverse n |> String.split "-" of
-        lod :: tile :: rem ->
-            "{ key = "
-                ++ String.reverse (String.join "-" rem)
+decomposeMeshInfo { meshName, tileId, lodRes } =
+    case (meshName, tileId, lodRes) of
+        (Just n, Just id, Just res) ->
+            "closest mesh: { key = "
+                ++ n
                 ++ ", tile = "
-                ++ String.reverse tile
+                ++ String.fromInt id
                 ++ ", lod = "
-                ++ String.reverse lod
-                ++ " }"
-
+                ++ String.fromFloat res
+                ++ "m }"
         _ ->
-            n
+            ""

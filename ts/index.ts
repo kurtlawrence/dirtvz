@@ -1,2 +1,11 @@
+import { memory } from "./wasm";
 export { Viewer } from "./viewer";
-export { viewerUi, __force_load_lod_res } from "./viewer-ui";
+export { viewerUi } from "./viewer-ui";
+
+export function wasm_buffer_size(): number {
+    return memory.buffer.byteLength;
+}
+
+export function __grow(delta: number): number {
+    return memory.grow(delta);
+}

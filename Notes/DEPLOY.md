@@ -41,7 +41,7 @@ Note that this operation is _destructive_ so it is recommended to be done in a s
 
 Follow [Production Building](#Production-Building).
 
-**Step 2. Remove all but the `dist/` folder**
+**Step 2. Deploy on `app-site` branch**
 
 ```sh
 mkdir tmp-dirtvz-app-push

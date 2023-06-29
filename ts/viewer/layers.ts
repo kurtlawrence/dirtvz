@@ -1,25 +1,26 @@
 import { Color3, Mesh, Scene, StandardMaterial, VertexData } from "@babylonjs/core";
 import { Extents3 } from "./../wasm";
 import { Properties } from './prop';
-import * as store from '../store';
 import { Store } from '../store';
-import { spawn, WorkerApi } from "../worker-spawn";
+import { WorkerApi, spawn_pool } from "../worker-spawn";
 import { EsThreadPool, Transfer } from "threads-es";
+import { has_tile, SpatialObject } from "../spatial-obj";
 
 type ObjKey = string;
 
 export class Layers {
 	_store: Store;
 	_scene: Scene;
-	_loaded: Map<ObjKey, store.Tile[]> = new Map();
-	_tiles: Map<number, Array<Tile>> = new Map();
+	_loaded: Map<ObjKey, SpatialObject> = new Map();
+	_tiles: Map<number, Tile[]> = new Map();
 	_def_props: Properties = new Properties();
 	_wkr?: EsThreadPool<WorkerApi>;
+	_update_ver: number = 0;
 
 	constructor(store: Store, scene: Scene) {
 		this._store = store;
 		this._scene = scene;
-		EsThreadPool.Spawn(spawn).then(x => this._wkr = x);
+		spawn_pool().then(x => this._wkr = x);
 	}
 
 	is_loaded(obj: ObjKey): boolean {
@@ -31,42 +32,40 @@ export class Layers {
 	 * This will bulk load the lowest LOD available.
 	 * You may want to then update the visible tiles with higher quality LODs.
 	 */
-	async add_surface(obj: ObjKey, tile_load_cb?: () => void) {
+	async add_surface(obj: ObjKey) {
 		const st = this._store;
-		const [tiles, extents] = await Promise.all([
-			st.find_object(obj)
-			.then(x => x ? st.get_object_tiles(x) : Promise.resolve(undefined)),
+		const [sobj, extents] = await Promise.all([
+			st.find_object(obj),
 			st.extents()
 		]);
-		if (!tiles || !extents)
+		if (!sobj || !extents)
 			return;
 
-		await Promise.all(tiles.map(async (tile) => {
-			const zs = await this._store.get_lod(obj, tile, 0);
-			if (zs) {
+		this._loaded.set(obj, sobj);
+
+		return Promise.all(sobj.roots.map(async tile => {
+			const zs = await this._store.get_tile(obj, tile);
+			if (zs)
 				await this.add_surface_tile(extents, obj, tile, zs);
-				if (tile_load_cb)
-					tile_load_cb();
-			}
 		}));
 	}
 
-	private async add_surface_tile(extents: Extents3, obj: ObjKey, tile: store.Tile, zs: Float32Array) {
-		const tile_idx = tile.idx;
-		let tiles = this._tiles.get(tile_idx);
+	private async add_surface_tile(extents: Extents3, obj: ObjKey, tile: number, zs: Float32Array) {
+		let tiles = this._tiles.get(tile);
 		if (!tiles) {
 			tiles = [];
-			this._tiles.set(tile_idx, tiles)
+			this._tiles.set(tile, tiles)
 		}
 
-		const mesh = new Mesh('', this._scene);
+		const mesh = new Mesh(`${obj}/${tile}`, this._scene);
 		mesh.freezeWorldMatrix();
 		// mesh.isUnIndexed = true; // for flat shading
 
 		apply_prop_to_mesh(mesh, this._def_props, this._scene);
 
-		const vd = await this.build_tile_vertex_data(extents, tile_idx, zs);
-		tiles.push(new Tile(obj, tile, mesh, vd));
+		const vd = await this.build_tile_vertex_data(extents, tile, zs);
+		vd.applyToMesh(mesh);
+		tiles.push(new Tile(obj, mesh));
 	}
 
 	private async build_tile_vertex_data(extents: Extents3, tile_idx: number, zs: Float32Array): Promise<VertexData> {
@@ -78,7 +77,7 @@ export class Layers {
 			Transfer(xts.buffer)
 		));
 
-		if (!vd || vd.empty) 
+		if (!vd || vd.empty)
 			return vertex_data;
 
 		vertex_data.positions = new Float32Array(vd.positions);
@@ -88,46 +87,57 @@ export class Layers {
 		return vertex_data;
 	}
 
-	async update_lods_inview(tile_idx: number, lod_res: number, extents: Extents3) {
-		const tiles = this._tiles.get(tile_idx);
-		if (!tiles)
-			return;
+	async update_inview_tiles(inview_tiles: Iterable<number>, outview_tiles: Iterable<number>, extents: Extents3, onload: () => void) {
+		this._update_ver += 1;
+		const ver = this._update_ver;
+		const inview = new Set(inview_tiles);
+		const outview = new Set(outview_tiles);
+		const to_remove = Array.from(this._tiles.keys())
+			.filter(x => !inview.has(x) && !outview.has(x));
 
-		for (const tile of tiles) {
-			const lod = choose_lod(tile.store_tile, lod_res);
-			if (lod.idx == tile.lod_idx)
-				continue; // no change, skip updating
+		// first, add all the _new_ in view tiles
+		// note that this will update over already existing meshes
+		await this.add_tiles(inview, extents, ver, onload);
 
-			tile.lod_idx = lod.idx;
-			if (lod.idx == 0) {
-				// the change can use the cached lowest lod
-				tile.apply_lowest_lod_vd();
-			} else {
-				const zs = await
-				this._store.get_lod(tile.objkey, tile.store_tile, lod.idx);
-				if (!zs)
-					continue;
+		// second, dispose of all meshes to remove
+		for (const tile_idx of to_remove) {
+			if (ver != this._update_ver)
+				break; // version changed
 
-				const vd = await this.build_tile_vertex_data(extents, tile_idx, zs);
-
-				// only apply if the lod hasn't changed again!
-				if (vd && tile.lod_idx == lod.idx) {
-					tile.apply_vd(vd);
-				}
+			const tiles = this._tiles.get(tile_idx);
+			if (tiles) {
+				for (const tile of tiles)
+					tile.dispose();
+				this._tiles.delete(tile_idx);
 			}
+
+			onload();
 		}
+
+		// finally, load all out of view meshes
+		await this.add_tiles(outview, extents, ver, onload);
 	}
 
-	update_lods_outview(inview_tiles: Iterable<number>) {
-		const inview = new Set(inview_tiles);
-		for (const [tile_idx, tiles] of this._tiles) {
-			if (inview.has(tile_idx))
-				continue;
+	private async add_tiles(tiles: Iterable<number>, extents: Extents3, ver: number, onload: () => void) {
+		const db = this._store;
+		await Promise.all(Array.from(tiles).map(async tile_idx => {
+			if (ver != this._update_ver)
+				return; // version changed
 
-			for (const tile of tiles) {
-				tile.apply_lowest_lod_vd();
+			if (this._tiles.has(tile_idx))
+				return; // no change already loaded
+
+			for (const obj of this._loaded.values()) {
+				if (!has_tile(obj, tile_idx))
+					continue;
+
+				const zs = await db.get_tile(obj.key, tile_idx);
+				if (zs)
+					await this.add_surface_tile(extents, obj.key, tile_idx, zs);
 			}
-		}
+
+			onload();
+		}));
 	}
 }
 
@@ -143,44 +153,14 @@ function apply_prop_to_mesh(mesh: Mesh, prop: Properties, scene: Scene) {
 
 class Tile {
 	objkey: ObjKey;
-	store_tile: store.Tile;
-	lod_idx: number;
-	low_lod_vd: VertexData;
 	mesh: Mesh;
 
-	/* Construct a new tile with the lowest lod vertex data.
-     * 
-	 * Note that this will name the mesh and apply the vertex data for you.
-	 */
-	constructor(key: ObjKey, store_tile: store.Tile, mesh: Mesh, persistent_vd: VertexData) {
+	constructor(key: ObjKey, mesh: Mesh) {
 		this.objkey = key;
-		this.store_tile = store_tile;
-		this.lod_idx = 0;
 		this.mesh = mesh;
-		this.low_lod_vd = persistent_vd;
-
-		this.apply_lowest_lod_vd();
 	}
 
-	name(): string {
-		return `${this.objkey}-${this.store_tile.idx}-${this.lod_idx}`;
-	}
-
-	apply_lowest_lod_vd() {
-		this.lod_idx = 0;
-		this.apply_vd(this.low_lod_vd);
-	}
-
-	apply_vd(vd: VertexData) {
-		this.mesh.name = this.name();
-		vd.applyToMesh(this.mesh);
+	dispose() {
+		this.mesh.dispose();
 	}
 }
-
-function choose_lod(tile: store.Tile, res: number) {
-    // we leverage the fact that these are ordered in _ascending resolution_.
-    // the choice is the minimum res **greater** than the request res.
-    const lods = tile.lods;
-    return lods.find(x => x.res >= res) ?? lods[lods.length - 1];
-}
-
