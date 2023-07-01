@@ -6,3 +6,4 @@ node_modules
 /wasm-pack.log
 /elm-stuff
 /js/viewer-ui.js
+/do-app-site-release.sh

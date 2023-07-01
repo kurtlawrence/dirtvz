@@ -31,6 +31,20 @@ All the `.js` files can be minified. `uglifyjs` is used to achieve this.
 uglifyjs dist/*.js --mangle --compress --in-situ
 ```
 
+## Deploy Release
+
+Currently releases are manually created on Github.
+The release tag is versioned as `vYYMMDD.P-alpha` where `YYMMDD` is the year-month-day of the
+release and `P` is a patch integer (starting at 0) which would increment if multiple releases are
+required in a single day.
+_It is advisable to wait a day rather than release a patch version._
+Include as artifacts:
+- `dirtvz.js`
+- `*.module.wasm`
+- `dirtvz-ui.js`
+- `dirtvz-worker.js`
+
+
 ## Github Pages `app-site` branch
 
 To update the demo app site at https://kurtlawrence.github.io/dirtvz, a static site needs to be
