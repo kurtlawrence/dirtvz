@@ -52,6 +52,7 @@ As the project matures, Github issues will be adopted more formally.
 - [ ] ? rework database to create a store _per object_
 - [ ] progress on preprocessing
 - [ ] ? support for large surfaces (progressive sampling?)
+- [ ] import preprocessing performance (parallelise or cache sampling points)
 
 # Developing commands
 
