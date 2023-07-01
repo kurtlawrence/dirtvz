@@ -27,7 +27,7 @@ async function viewerUi(element: HTMLElement | string) {
     // routeNotice(app);
 
     const store = await Store.connect(DBNAME);
-
+	
     // fire off the initial object list
     store.get_object_list().then(APP.ports.objectList.send);
 
@@ -147,14 +147,4 @@ async function start_preprocessing_interval(app: any, store: Store, millis: numb
                 .catch(e => console.error({ msg: `preprocessing failed for ${x.key}`, inner: e }));
         });
     }, millis);
-}
-
-export async function __force_load_lod_res(lod_res: number) {
-    if (!VWR || !VWR.tiler)
-        return;
-
-    const tiles = VWR.tiler.in_view_tiles();
-
-	for (const tile of tiles)
-		await VWR.layers.update_lods_inview(tile, lod_res, VWR.extents);
 }

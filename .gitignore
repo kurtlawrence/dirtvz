@@ -2,6 +2,7 @@ node_modules
 /dist
 /target
 /pkg
+/wasmpkg
 /wasm-pack.log
 /elm-stuff
 /js/viewer-ui.js

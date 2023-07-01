@@ -1,7 +1,7 @@
 import * as BABYLON from "@babylonjs/core";
 import { Camera } from './camera';
 import { Store } from "./../store";
-import { ViewableTiles, Extents3 } from './../wasm';
+import { ViewableTiles, Extents3, TileId } from './../wasm';
 import { Layers } from "./layers";
 import { Light } from './light';
 import { Color4, Scene } from "@babylonjs/core";
@@ -19,9 +19,9 @@ export class Viewer {
     _hover: Hover;
     _viewts?: number;
     _dirty: boolean = true;
-	extents: Extents3 = Extents3.zero_to_one();
+    extents: Extents3 = Extents3.zero_to_one();
 
-    private static TILE_LOD_TIMEOUT: number = 100; // wait before loading
+    private static TILE_LOD_TIMEOUT: number = 200; // wait before loading
 
     private constructor(canvas: HTMLCanvasElement, store: Store) {
         this.canvas = canvas;
@@ -62,14 +62,14 @@ export class Viewer {
 
         vwr.scene.render(); // do initial render
 
-		// render at 60 fps
-		setInterval(() => vwr.maybe_render(), 1000 / 60);
+        // render at 60 fps
+        setInterval(() => vwr.maybe_render(), 1000 / 60);
         // Render every frame
         // vwr.engine.runRenderLoop(() => vwr.maybe_render());
 
         const extents = await store.extents();
-		if (extents) 
-		    vwr.extents = extents;
+        if (extents)
+            vwr.extents = extents;
 
         vwr.init_tiler();
         vwr._hover.extents = vwr.extents;
@@ -96,6 +96,8 @@ export class Viewer {
         return this.tiler;
     }
 
+    mark_dirty() { this._dirty = true; }
+
     private maybe_render() {
         const needs_render = this._dirty;
         if (needs_render) {
@@ -113,10 +115,11 @@ export class Viewer {
     }
 
     private async load_object(key: string) {
-		console.time(`loading object ${key}`);
-		await this.layers.add_surface(key, () => this._dirty = true);
-		console.timeEnd(`loading object ${key}`);
-		await this.update_in_view_tiles();
+        console.time(`loading object ${key}`);
+        await this.layers.add_surface(key);
+        this._dirty = true;
+        console.timeEnd(`loading object ${key}`);
+        await this.update_in_view_tiles();
     }
 
     onhover(cb: HoverCb) {
@@ -156,26 +159,26 @@ export class Viewer {
             return;
         }
 
-		const timeKey = `update_in_view_tiles ${Math.random()}`;
-		console.time(timeKey);
+        // const timeKey = `update_in_view_tiles ${Math.random()}`;
+        // console.time(timeKey);
 
+        // const updateKey = `recalculate viewbox ${Math.random()}`;
+        // console.time(updateKey);
         const viewbox = this.camera.viewbox(this.canvas, this.extents);
         this.tiler.update(viewbox);
+        // console.timeEnd(updateKey)
 
-        const viewable_tiles = this.tiler.in_view_tiles();
-        const viewable_lods = this.tiler.in_view_lods();
+        const inview = this.tiler.in_view_tiles();
+        const outview = this.tiler.out_view_tiles();
 
-        for (let i = 0; i < viewable_tiles.length; i++) {
-            const tile_idx = viewable_tiles[i];
-            const lod_res = viewable_lods[i];
-			await this.layers.update_lods_inview(tile_idx, lod_res, this.extents);
-			this._dirty = true;
-		}
+        // console.debug({inview, outview});
+
+        await this.layers.update_inview_tiles(inview, outview, this.extents, () => this.mark_dirty());
 
         // do last since it does not affect viewing
-		// don't mark dirty, does not need a render
-        this.layers.update_lods_outview(viewable_tiles);
-		console.timeEnd(timeKey);
+        // don't mark dirty, does not need a render
+        // this.layers.update_lods_outview(viewable_tiles);
+        // console.timeEnd(timeKey);
     }
 }
 
@@ -229,8 +232,13 @@ class Hover {
         }
 
         let mesh_name;
+        let tile_id;
+        let lod_res;
         if (pick.pickedMesh) {
-            mesh_name = pick.pickedMesh.name;
+            const x = pick.pickedMesh.name.split('/');
+            tile_id =  parseFloat(x[x.length - 1]);
+            mesh_name = x.slice(0, -1).join('/');
+            lod_res = TileId.from_num(tile_id).lod_res();
         }
 
         const info = {
@@ -238,7 +246,9 @@ class Hover {
             pointery: y,
             render_pt,
             world_pt,
-            mesh_name
+            mesh_name,
+            tile_id,
+            lod_res
         };
 
         this.action(info);
@@ -252,7 +262,9 @@ export type HoverInfo = {
     pointery: number,
     render_pt?: Xyz,
     world_pt?: Xyz,
-    mesh_name?: string
+    mesh_key?: string,
+    tile_id?: number,
+    lod_res?: number,
 }
 
 export type Xyz = {
