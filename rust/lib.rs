@@ -718,9 +718,6 @@ impl ViewableTiles {
     }
 
     /// Calculate the tiles/lods in view and store them internally.
-    ///
-    /// The `viewbox_extents` is the AABB of **render space** in camera view.
-    /// The `camera_dir` is a **render space** vector of the camera view direction.
     pub fn update(&mut self, viewbox: &Viewbox) {
         let world = &self.extents;
         let scaler = world.max_dim();

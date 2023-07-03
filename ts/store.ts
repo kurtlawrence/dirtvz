@@ -56,10 +56,9 @@ export class Store {
 	}
 
 	async set_extents(extents: Extents3) {
-		const objs = await this.get_object_list();
-
-		return this.transact('root', 'readwrite', async store => {
+		await this.transact('root', 'readwrite', async store => {
 			await store.put_bytes(Key.DataExtents, extents.to_bytes());
+			const objs: SpatialObject[] = await store.get(Key.ObjList) ?? [];
 			objs.forEach(x => x.status = Status.Preprocessing);
 			store.put(Key.ObjList, objs);
 			console.info({ msg: `Data extents set for '${this.db_name}'`, extents: extents.toString() });

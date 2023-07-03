@@ -1,5 +1,5 @@
 import { Viewer } from "./viewer/viewer";
-import { spawn } from './worker-spawn';
+import { spawn, spawn_pool } from './worker-spawn';
 import { Store } from './store';
 import { Status } from "./spatial-obj";
 
@@ -27,7 +27,7 @@ async function viewerUi(element: HTMLElement | string) {
     // routeNotice(app);
 
     const store = await Store.connect(DBNAME);
-	
+
     // fire off the initial object list
     store.get_object_list().then(APP.ports.objectList.send);
 
@@ -118,7 +118,7 @@ function routeNotice(app: any) {
 }
 
 async function start_preprocessing_interval(app: any, store: Store, millis: number) {
-    const worker = await spawn();
+    const worker = await spawn_pool();
     // maintain a set to avoid overlapping preprocessing
     const processing = new Set();
     // run every `millis`
@@ -129,22 +129,31 @@ async function start_preprocessing_interval(app: any, store: Store, millis: numb
         // and add to set
         tostart.forEach(x => processing.add(x.key));
 
-        tostart.forEach(x => {
-            // fork off the processing onto a worker
-            const timerkey = `preprocess: ${x.key}`;
-            console.time(timerkey);
-            worker.methods.preprocess_spatial_object(store.db_name, x.key)
-                .then(async () => {
-                    console.timeEnd(timerkey);
-                    // once it is done, update the store and set
-                    let obj = await store.find_object(x.key) ?? x;
-                    obj.status = Status.Ready;
-                    await store.update_object_list(obj);
-                    processing.delete(x.key);
-                    // return some progress.
-                    return store.get_object_list().then(app.ports.objectList.send);
-                })
-                .catch(e => console.error({ msg: `preprocessing failed for ${x.key}`, inner: e }));
-        });
+        for (const x of tostart) {
+            try {
+                // fork off the processing onto a worker
+                const timerkey = `preprocess: ${x.key}`;
+                console.time(timerkey);
+                const extents_chgd = await worker.queue(w =>
+                    w.methods.preprocess_spatial_object(store.db_name, x.key));
+                console.timeEnd(timerkey);
+
+                if (extents_chgd && VWR) {
+                    const xs = await store.extents();
+                    if (xs)
+                        VWR.store_extents_changed(xs);
+                }
+
+                // once it is done, update the store and set
+                let obj = await store.find_object(x.key) ?? x;
+                obj.status = Status.Ready;
+                await store.update_object_list(obj);
+                processing.delete(x.key);
+                // return some progress.
+                store.get_object_list().then(app.ports.objectList.send);
+            } catch (e) {
+                console.error({ msg: `preprocessing failed for ${x.key}`, inner: e });
+            }
+        }
     }, millis);
 }

@@ -53,6 +53,7 @@ As the project matures, Github issues will be adopted more formally.
 - [ ] progress on preprocessing
 - [ ] ? support for large surfaces (progressive sampling?)
 - [ ] import preprocessing performance (parallelise or cache sampling points)
+- [ ] alert users when an object goes outside of the data extents
 
 # Developing commands
 

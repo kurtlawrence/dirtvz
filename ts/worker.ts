@@ -21,16 +21,19 @@ async function read_load_and_store_from_spatial_file(db_name: string, file: File
 	await db.store_object(obj.name ?? 'new-object', obj.obj);
 }
 
-async function preprocess_spatial_object(db_name: string, objkey: string) {
+/** Returns if the data extent were changed. */
+async function preprocess_spatial_object(db_name: string, objkey: string): Promise<boolean> {
 	const db = await Store.connect(db_name);
 	const mesh = await db.get_object(objkey);
 	if (!mesh)
-		return;
+		return false;
 
 	let extents = await db.extents();
+	let chgd = false;
 	if (!extents) {
 		extents = mesh.aabb();
 		await db.set_extents(extents);
+		chgd = true;
 	}
 
 	console.time('generating tiles hash');
@@ -41,8 +44,10 @@ async function preprocess_spatial_object(db_name: string, objkey: string) {
 	for (const tile_idx of tiles) {
 		let zs = hash.sample(tile_idx);
 		if (zs)
-		    await db.store_tile(objkey, tile_idx, zs);
+			await db.store_tile(objkey, tile_idx, zs);
 	}
+
+	return chgd;
 }
 
 export type MeshVertexData = {

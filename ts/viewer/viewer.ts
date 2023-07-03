@@ -83,14 +83,12 @@ export class Viewer {
         return vwr;
     }
 
-    private async init_tiler(): Promise<ViewableTiles | undefined> {
+    private init_tiler(): ViewableTiles | undefined {
         if (!this.tiler) {
-            let xs = await this.store.extents();
-            if (xs) {
-                const viewbox = this.camera.viewbox(this.canvas, xs);
-                this.tiler = ViewableTiles.new(xs);
-                this.tiler.update(viewbox);
-            }
+            const xs = this.extents;
+            const viewbox = this.camera.viewbox(this.canvas, xs);
+            this.tiler = ViewableTiles.new(xs);
+            this.tiler.update(viewbox);
         }
 
         return this.tiler;
@@ -104,6 +102,14 @@ export class Viewer {
             this.scene.render();
             this._dirty = false;
         }
+    }
+
+    store_extents_changed(extents: Extents3) {
+        this.extents = extents;
+        this._hover.extents = extents;
+        this.tiler = undefined;
+        this.init_tiler();
+        this.camera.zoomDataExtents(extents, this.canvas);
     }
 
     async toggle_object(key: string) {
@@ -236,7 +242,7 @@ class Hover {
         let lod_res;
         if (pick.pickedMesh) {
             const x = pick.pickedMesh.name.split('/');
-            tile_id =  parseFloat(x[x.length - 1]);
+            tile_id = parseFloat(x[x.length - 1]);
             mesh_name = x.slice(0, -1).join('/');
             lod_res = TileId.from_num(tile_id).lod_res();
         }
