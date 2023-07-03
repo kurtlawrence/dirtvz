@@ -311,7 +311,8 @@ impl TriangleMeshSurface {
         let mut buf = Vec::new();
 
         for (idx, tri) in tris.iter().copied().enumerate() {
-            let aabb = Extents2::from(tri.aabb());
+            // expand the triangle extents to add some tolerance
+            let aabb = Extents2::from(tri.aabb()).expand(0.1);
 
             buf.clear();
 
@@ -534,6 +535,7 @@ impl TileHash {
         (!grid.is_blank()).then_some(())?; // exit if empty
 
         assert_eq!(grid.len(), COUNT.pow(2));
+        // web_sys::console::debug_1(&format!("{}", grid.len_nonempty()).into());
 
         let scaler = self.extents.max_dim();
         let z = self.extents.origin.z;
