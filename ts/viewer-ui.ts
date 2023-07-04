@@ -15,7 +15,7 @@ async function viewerUi(element: HTMLElement | string) {
     if (element instanceof HTMLElement) node = element;
     else node = document.getElementById(element);
 
-    customElements.define("dirtvis-viewer", CanvasRenderer);
+    customElements.define("dirtvz-viewer", CanvasRenderer);
 
     const flags = {};
 
@@ -87,19 +87,21 @@ class ElmMsg {
 
 class CanvasRenderer extends HTMLElement {
     canvas: HTMLCanvasElement;
+	obs?: ResizeObserver;
 
     constructor() {
         super();
 
         const canvas = document.createElement("canvas");
-        canvas.style.height = "100%";
-        canvas.style.width = "100%";
-
         this.canvas = canvas;
     }
 
     connectedCallback() {
+		this.obs = new ResizeObserver(e => this.sizeCanvas(e[0]));
+		this.obs.observe(this);
+
         this.appendChild(this.canvas);
+
         Viewer.init(this.canvas, DBNAME).then((x) => {
             x.onhover(info => {
 				// console.debug(info);
@@ -111,8 +113,23 @@ class CanvasRenderer extends HTMLElement {
 
     disconnectedCallback() {
         VWR = undefined;
+		this.obs?.disconnect();
+		this.obs = undefined;
         this.removeChild(this.canvas);
     }
+
+	sizeCanvas(size: ResizeObserverEntry) {
+		const width = `${size.contentBoxSize[0].inlineSize}px`;
+		const height = `${size.contentBoxSize[0].blockSize}px`;
+		const chgd = 
+			this.canvas.style.width !== width || this.canvas.style.height !== height;
+
+        this.canvas.style.width = width;
+        this.canvas.style.height = height;
+
+		if (chgd)
+			VWR?.canvas_size_changed();
+	}
 }
 
 function routeNotice(app: any) {

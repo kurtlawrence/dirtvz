@@ -132,18 +132,18 @@ subscriptions _ =
 
 view : Model -> Html
 view model =
-    div []
-        [ div []
-            [ text "Hello from Elm land" ]
-        , div []
-            [ node "dirtvis-viewer"
-                [ css [ display block, width (px 500), height (px 500) ]
-                ]
-                []
-            ]
+    div
+        [ A.style "height" "100%"
+        , A.style "display" "flex"
+        , A.style "flex-flow" "column"
+        ]
+        [ node "dirtvz-viewer"
+            [ css [ displayFlex, flex3 (int 1) (int 1) (px 500), minWidth (px 500), minHeight (px 500) ] ]
+            []
         , div [] [ objectListView model.objList ]
         , div [] [ button [ onClick PickSpatialFile ] [ text "Add spatial object" ] ]
-        , div [] [ Maybe.map hoverInfoView model.hoverInfo |> Maybe.withDefault (div [] []) ]
+        , div [ css [ height (px 120) ] ] 
+        [ Maybe.map hoverInfoView model.hoverInfo |> Maybe.withDefault (div [] []) ]
         , div [] [ noticeView model.notice ]
         ]
 

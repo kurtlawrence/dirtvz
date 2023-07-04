@@ -112,6 +112,12 @@ export class Viewer {
         this.camera.zoomDataExtents(extents, this.canvas);
     }
 
+	canvas_size_changed() {
+		console.debug('canvas size changed');
+		this.scene.render();
+	}
+
+
     async toggle_object(key: string) {
         if (this.layers.is_loaded(key)) {
         } else {
