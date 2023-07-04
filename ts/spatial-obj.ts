@@ -9,7 +9,8 @@ export enum Status {
     Unloaded = 'unloaded',
     Preprocessing = 'preprocessing',
     Loaded = 'loaded',
-    Ready = 'ready'
+    Ready = 'ready',
+	Deleting = 'deleting',
 }
 
 function cmpr(a: number, b: number): number {

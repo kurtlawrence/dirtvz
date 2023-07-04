@@ -120,8 +120,9 @@ export class Viewer {
 
     async toggle_object(key: string) {
         if (this.layers.is_loaded(key)) {
+			this.unload_object(key);
         } else {
-            if (await this.init_tiler())
+            if (this.init_tiler())
                 this.load_object(key);
         }
     }
@@ -133,6 +134,11 @@ export class Viewer {
         console.timeEnd(`loading object ${key}`);
         await this.update_in_view_tiles();
     }
+
+	async unload_object(key: string) {
+		this.layers.unload(key);
+		this.mark_dirty();
+	}
 
     onhover(cb: HoverCb) {
         this._hover.action = cb;

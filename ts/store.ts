@@ -89,6 +89,15 @@ export class Store {
 		});
 	}
 
+	async mark_deletion(obj: string) {
+		const sobj = await this.find_object(obj);
+		if (!sobj)
+			return;
+		
+		sobj.status = Status.Deleting;
+		return this.update_object_list(sobj);
+	}
+
 	async delete_object(obj: string) {
 		const sobj = await this.find_object(obj);
 		const sobjs = await this.get_object_list();
@@ -108,6 +117,7 @@ export class Store {
 
 		return Promise.all([update_sobjs, rm_raw, rm_tiles]);
 	}
+
 
 	async get_object_list(): Promise<SpatialObject[]> {
 		return this.transact('root', 'readonly', async store => {

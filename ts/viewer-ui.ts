@@ -53,12 +53,15 @@ async function viewerUi(element: HTMLElement | string) {
         input.click();
     });
 
-    APP.ports.delete_spatial_object.subscribe((key: string) => {
-        store.delete_object(key)
-            .then(() => ElmMsg.ok(`Deleted ${key}`).send())
-            .then(() => store.get_object_list())
-            .then(APP.ports.object_list.send);
-    })
+    APP.ports.delete_spatial_object.subscribe(async (key: string) => {
+		VWR?.unload_object(key);
+		await store.mark_deletion(key);
+		store.get_object_list().then(APP.ports.object_list.send);
+
+        await store.delete_object(key);
+        ElmMsg.ok(`Deleted ${key}`).send();
+		store.get_object_list().then(APP.ports.object_list.send);
+    });
 
     APP.ports.toggle_loaded.subscribe((key: string) => {
         VWR?.toggle_object(key);

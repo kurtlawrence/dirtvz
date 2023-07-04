@@ -27,6 +27,17 @@ export class Layers {
 		return this._loaded.has(obj);
 	}
 
+	unload(obj: ObjKey) {
+		this._loaded.delete(obj);
+
+		for (const ts of this._tiles.values()) {
+			for (const t of ts) {
+				if (t.objkey == obj)
+					t.dispose();
+			}
+		}
+	}
+
 	/* Add a new _surface_ object to the loaded layers.
 	 *
 	 * This will bulk load the lowest LOD available.
