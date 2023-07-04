@@ -28,39 +28,37 @@ decodePoint3 =
         |> P.required "z" D.float
 
 
-port pickSpatialFile : () -> Cmd a
+null : String -> D.Decoder a -> D.Decoder (Maybe a -> b) -> D.Decoder b
+null field dec =
+    P.optional field (D.map Just dec) Nothing
 
 
-port objectList : (List SpatialObject.SpatialObject -> msg) -> Sub msg
+port pick_spatial_file : () -> Cmd a
 
 
-port deleteSpatialObject : String -> Cmd a
+port delete_spatial_object : String -> Cmd a
 
 
-port toggleLoaded : String -> Cmd a
+port toggle_loaded : String -> Cmd a
 
 
-hoverinfo : (Maybe HoverInfo -> msg) -> Sub msg
-hoverinfo toMsg =
-    hoverInfo
+hoverInfo : (Maybe HoverInfo -> msg) -> Sub msg
+hoverInfo toMsg =
+    hover_info
         (D.decodeString
             (D.succeed HoverInfo
-                |> P.required "pointerx" D.int
-                |> P.required "pointery" D.int
+                |> P.required "pointerx" (D.map round D.float)
+                |> P.required "pointery" (D.map round D.float)
                 |> null "render_pt" decodePoint3
                 |> null "world_pt" decodePoint3
                 |> null "mesh_name" D.string
                 |> null "tile_id" D.int
                 |> null "lod_res" D.float
             )
+            -- >> Result.mapError (Debug.log "HoverInfo failed to deserialise")
             >> Result.toMaybe
             >> toMsg
         )
 
 
-port hoverInfo : (String -> msg) -> Sub msg
-
-
-null : String -> (D.Decoder a) -> D.Decoder (Maybe a -> b) -> D.Decoder b
-null field dec =
-    P.optional field (D.map Just dec) Nothing
+port hover_info : (String -> msg) -> Sub msg

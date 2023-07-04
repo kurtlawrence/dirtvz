@@ -1,11 +1,13 @@
 module ViewerUI exposing (..)
 
 import Browser
-import Html exposing (..)
-import Html.Attributes exposing (..)
-import Html.Events exposing (..)
+import Css exposing (..)
+import Html.Styled as H exposing (..)
+import Html.Styled.Attributes as A exposing (css)
+import Html.Styled.Events exposing (..)
 import Notice
 import Ports exposing (HoverInfo)
+import Progress exposing (Progress)
 import SpatialObject exposing (SpatialObject)
 
 
@@ -19,7 +21,7 @@ main =
         { init = init
         , subscriptions = subscriptions
         , update = update
-        , view = view
+        , view = view >> toUnstyled
         }
 
 
@@ -41,6 +43,7 @@ type Msg
     | DeleteObject ObjKey
     | ToggleLoaded ObjKey
     | RecvHoverInfo (Maybe HoverInfo)
+    | RecvProgress Progress
 
 
 type alias Flags =
@@ -48,7 +51,7 @@ type alias Flags =
 
 
 type alias Html =
-    Html.Html Msg
+    H.Html Msg
 
 
 type alias ObjKey =
@@ -76,7 +79,7 @@ update msg model =
             ( { model | notice = n }, Cmd.none )
 
         PickSpatialFile ->
-            ( model, Ports.pickSpatialFile () )
+            ( model, Ports.pick_spatial_file () )
 
         RecvObjectList list ->
             ( { model | objList = list }, Cmd.none )
@@ -84,16 +87,24 @@ update msg model =
         DeleteObject key ->
             ( model
             , Cmd.batch
-                [ Ports.deleteSpatialObject key
+                [ Ports.delete_spatial_object key
                 , Notice.waiting Notice ("Deleting '" ++ key ++ "' from database")
                 ]
             )
 
         ToggleLoaded key ->
-            ( model, Ports.toggleLoaded key )
+            ( model, Ports.toggle_loaded key )
 
         RecvHoverInfo info ->
             ( { model | hoverInfo = info }, Cmd.none )
+
+        RecvProgress p ->
+            case Progress.decode p of
+                Progress.Preprocessing key ->
+                    ( { model | objList = SpatialObject.setProgress p key model.objList }, Cmd.none )
+
+                Progress.Unknown ->
+                    ( model, Cmd.none )
 
 
 liftUpdate : (b -> Msg) -> (a -> Model) -> ( a, Cmd b ) -> ( Model, Cmd Msg )
@@ -108,9 +119,10 @@ liftUpdate toMsg toModel =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ Notice.getNotice (Notice.recv Notice)
-        , Ports.objectList RecvObjectList
-        , Ports.hoverinfo RecvHoverInfo
+        [ Notice.get_notice (Notice.recv Notice)
+        , SpatialObject.objectList RecvObjectList
+        , Ports.hoverInfo RecvHoverInfo
+        , Progress.recv_progress RecvProgress
         ]
 
 
@@ -124,7 +136,10 @@ view model =
         [ div []
             [ text "Hello from Elm land" ]
         , div []
-            [ node "dirtvis-viewer" [ style "display" "block", style "width" "500px", style "height" "500px" ] []
+            [ node "dirtvis-viewer"
+                [ css [ display block, width (px 500), height (px 500) ]
+                ]
+                []
             ]
         , div [] [ objectListView model.objList ]
         , div [] [ button [ onClick PickSpatialFile ] [ text "Add spatial object" ] ]
@@ -151,15 +166,28 @@ noticeView notice =
 objectListView : List SpatialObject -> Html
 objectListView =
     List.map
-        (\{ key, status } ->
+        (\x ->
             div []
-                [ strong [] [ text key ]
-                , em [] [ text status ]
-                , button [ onClick (DeleteObject key) ] [ text "delete" ]
-                , button [ onClick (ToggleLoaded key) ] [ text "load/unload" ]
+                [ div []
+                    [ strong [] [ text x.key ]
+                    , H.em [] [ text x.status ]
+                    , button [ onClick (DeleteObject x.key) ] [ text "delete" ]
+                    , button [ onClick (ToggleLoaded x.key) ] [ text "load/unload" ]
+                    ]
+                , maybeProgBar x
                 ]
         )
         >> div []
+
+
+maybeProgBar : SpatialObject -> Html
+maybeProgBar { status, prg } =
+    case ( status, prg ) of
+        ( "preprocessing", Just p ) ->
+            div [] [ Progress.viewBar False p ]
+
+        _ ->
+            div [] []
 
 
 hoverInfoView : HoverInfo -> Html
@@ -195,8 +223,8 @@ p3toString { x, y, z } =
 
 
 decomposeMeshInfo { meshName, tileId, lodRes } =
-    case (meshName, tileId, lodRes) of
-        (Just n, Just id, Just res) ->
+    case ( meshName, tileId, lodRes ) of
+        ( Just n, Just id, Just res ) ->
             "closest mesh: { key = "
                 ++ n
                 ++ ", tile = "
@@ -204,5 +232,6 @@ decomposeMeshInfo { meshName, tileId, lodRes } =
                 ++ ", lod = "
                 ++ String.fromFloat res
                 ++ "m }"
+
         _ ->
             ""

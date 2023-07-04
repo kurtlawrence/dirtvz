@@ -3,6 +3,7 @@ import { Transfer, TransferDescriptor } from 'threads-es/shared';
 import * as local_loader from './local-loader';
 import { Store } from './store';
 import * as wasm from './wasm';
+import * as prgrs from './prg-stream';
 
 const api = {
 	read_load_and_store_from_spatial_file,
@@ -22,7 +23,11 @@ async function read_load_and_store_from_spatial_file(db_name: string, file: File
 }
 
 /** Returns if the data extent were changed. */
-async function preprocess_spatial_object(db_name: string, objkey: string): Promise<boolean> {
+async function preprocess_spatial_object(
+	db_name: string,
+    objkey: string,
+    progress: prgrs.Channel
+): Promise<boolean> {
 	const db = await Store.connect(db_name);
 	const mesh = await db.get_object(objkey);
 	if (!mesh)
@@ -37,15 +42,25 @@ async function preprocess_spatial_object(db_name: string, objkey: string): Promi
 	}
 
 	console.time('generating tiles hash');
-	let hash = mesh.generate_tiles_hash(extents);
-	let tiles = hash.tiles();
+	const hash = mesh.generate_tiles_hash(extents);
+	const tiles = hash.tiles();
 	console.timeEnd('generating tiles hash');
 
+	const outof = tiles.length;
+	const pr = progress.send.getWriter();
+	let iter = 0;
+
 	for (const tile_idx of tiles) {
-		let zs = hash.sample(tile_idx);
-		if (zs)
+		const zs = hash.sample(tile_idx);
+		if (zs) {
 			await db.store_tile(objkey, tile_idx, zs);
+			iter += 1;
+			await pr.write(prgrs.preprocessing(objkey, iter, outof));
+		}
 	}
+
+	await pr.ready.then(() => pr.releaseLock());
+	await progress.send.close();
 
 	return chgd;
 }

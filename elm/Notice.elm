@@ -59,7 +59,7 @@ send n =
                 Err x ->
                     ( "Err", x )
     in
-    setNotice { lvl = lvl, msg = msg }
+    set_notice { lvl = lvl, msg = msg }
 
 
 recv : (Notice -> a) -> Notice_ -> a
@@ -85,7 +85,7 @@ type alias Notice_ =
     }
 
 
-port setNotice : Notice_ -> Cmd a
+port set_notice : Notice_ -> Cmd a
 
 
-port getNotice : (Notice_ -> a) -> Sub a
+port get_notice : (Notice_ -> a) -> Sub a
