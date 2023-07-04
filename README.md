@@ -1,9 +1,12 @@
+[![Chat on Matrix](https://matrix.to/img/matrix-badge.svg)](https://matrix.to/#/#dirtvz:matrix.org)
+
 # dirtvz 🔎⛰🔍
 
 _Web-based, high performance 3D renderer for the mining industry._
 
 
 - [App 🔎⛰🔍](https://kurtlawrence.github.io/dirtvz/)
+- [Chat 💬 (on [Matrix])](https://matrix.to/#/#dirtvz:matrix.org)
 
 Dirtvz is an experimental web-based 3D renderer targeted specifically at the dataset common within
 the mining industry.
