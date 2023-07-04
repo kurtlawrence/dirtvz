@@ -1,19 +1,64 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="UTF-8">
-    <title>dirtvz - 3D Viewer</title>
-	<meta name="description" content="Web-based 3D rendering of large spatial data for the mining industry">
-    <script src="dirtvz.js"></script>
-  </head>
-  <body>
-	<div id="viewer"></div>
-	<script>
-    var DIRTVZ = dirtvz;
-		if (dirtvz instanceof Promise)
-		  dirtvz.then(x => { DIRTVZ= x; return x.viewerUi('viewer'); });
-		else
-			dirtvz.viewerUi('viewer');
-	</script>
-  </body>
+
+<head>
+  <meta charset="UTF-8">
+  <title>dirtvz - 3D Viewer</title>
+  <meta name="description" content="Web-based 3D rendering of large spatial data for the mining industry">
+  <script src="dirtvz.js"></script>
+  <link rel="stylesheet" href="index.css">
+</head>
+
+<body>
+  <div id="banner">
+    <h1>dirtvz 🔎⛰🔍</h1>
+    <div id="tag">
+      <div class="info" id="info-left">
+        <a href="https://github.com/kurtlawrence/dirtvz/releases">
+          <img src="https://img.shields.io/github/v/release/kurtlawrence/dirtvz">
+        </a>
+        <a href="https://github.com/kurtlawrence/dirtvz">
+          <img src="https://img.shields.io/github/stars/kurtlawrence/dirtvz?style=social">
+        </a>
+      </div>
+      <div>
+        <em>Web-based 3D rendering of large spatial data for the mining industry</em>
+      </div>
+      <div class="info" id="info-right">
+        <a href="https://matrix.to/#/#dirtvz%3Amatrix.org">
+          <img src="https://matrix.to/img/matrix-badge.svg">
+        </a>
+      </div>
+    </div>
+    <div id="message">
+      <blockquote>
+        <em>
+          🧪 dirtvz is in a highly experimental stage, focused on prototyping technologies
+          and techniques to enable high performance rendering of large mining datasets
+          through the browser.
+          Please note that dirtvz is is in very early stages of prototyping and there are
+          no stability guarantees. The included app is still very rudimentary and support
+          for various objects is limited. See
+          <a href="https://github.com/kurtlawrence/dirtvz#features-roadmap">Features
+            Roadmap</a>
+          for checklist to MVP.
+        </em>
+      </blockquote>
+    </div>
+  </div>
+
+  <div id="app-stage">
+    <div id="app">
+      <div id="viewer"></div>
+      <script>
+        var DIRTVZ = dirtvz;
+        if (dirtvz instanceof Promise)
+          dirtvz.then(x => { DIRTVZ = x; return x.viewerUi('viewer'); });
+        else
+          dirtvz.viewerUi('viewer');
+      </script>
+    </div>
+  </div>
+</body>
+
 </html>
