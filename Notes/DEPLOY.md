@@ -20,7 +20,11 @@ There should now exist the following files in the `dist/` folder:
 dirtvz.js        <-- library
 dirtvz-ui.js     <-- UI implementation
 dirtvz-worker.js <-- WebWorker
-index.html       <-- app-site
+
+index.html       <-- app-site landing page
+index.css        <-- app-site styling
+icon512.png      <-- icon
+favicon.ico      <-- icon
 ```
 
 ### Minification
@@ -40,9 +44,9 @@ required in a single day.
 _It is advisable to wait a day rather than release a patch version._
 Include as artifacts:
 - `dirtvz.js`
-- `*.module.wasm`
 - `dirtvz-ui.js`
 - `dirtvz-worker.js`
+- `*.module.wasm`
 
 
 ## Github Pages `app-site` branch
