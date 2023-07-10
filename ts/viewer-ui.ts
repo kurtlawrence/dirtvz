@@ -124,6 +124,7 @@ class CanvasRenderer extends HTMLElement {
 	sizeCanvas(size: ResizeObserverEntry) {
 		const width = `${size.contentBoxSize[0].inlineSize}px`;
 		const height = `${size.contentBoxSize[0].blockSize}px`;
+		console.debug(`canvas resize to w:${width}, h:${height}`);
 		const chgd = 
 			this.canvas.style.width !== width || this.canvas.style.height !== height;
 
