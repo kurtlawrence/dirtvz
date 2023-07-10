@@ -1,10 +1,11 @@
 module Style exposing (..)
 
 import Css exposing (..)
+import Svg
 import Css.Global
 import FontAwesome
-import FontAwesome.Solid
 import FontAwesome.Attributes
+import FontAwesome.Solid
 import Html.Styled as Html exposing (..)
 import Html.Styled.Attributes as Attr exposing (css)
 import Html.Styled.Events exposing (..)
@@ -48,6 +49,7 @@ globalCss =
         , borderRadius (px 4)
         , transform (translateX (px 10))
         , transform (translateY (pct -50))
+        , zIndex (int 1)
         ]
 
     -- display-on-parent-hover class
@@ -87,13 +89,45 @@ button =
         [ color theme.ac1
         , opacity (num 0.5)
         , cursor pointer
-        , hover [ opacity (num 1) ]
+        , borderRadius (px 3)
+        , hover [ opacity (num 1), backgroundColor theme.bg2 ]
         ]
 
 
-iconPen : Html msg
-iconPen =
+checkbox : List (Attribute msg) -> Html msg
+checkbox attrs =
+    styled
+        Html.input
+        []
+        (Attr.type_ "checkbox" :: attrs)
+        []
+
+
+iconPen : List (Svg.Attribute Never) -> Html msg
+iconPen attrs =
     FontAwesome.Solid.pen
-        |> FontAwesome.styled [ FontAwesome.Attributes.sm ]
+        |> FontAwesome.styled (FontAwesome.Attributes.sm :: attrs)
+        |> FontAwesome.view
+        |> fromUnstyled
+
+iconTrash : List (Svg.Attribute Never) -> Html msg
+iconTrash attrs =
+    FontAwesome.Solid.trash
+        |> FontAwesome.styled (FontAwesome.Attributes.sm :: attrs)
+        |> FontAwesome.view
+        |> fromUnstyled
+
+iconFileImport : List (Svg.Attribute Never) -> Html msg
+iconFileImport attrs =
+    FontAwesome.Solid.fileImport
+        |> FontAwesome.styled (FontAwesome.Attributes.sm :: attrs)
+        |> FontAwesome.view
+        |> fromUnstyled
+
+
+iconFolderPlus : List (Svg.Attribute Never) -> Html msg
+iconFolderPlus attrs =
+    FontAwesome.Solid.folderPlus
+        |> FontAwesome.styled (FontAwesome.Attributes.sm :: attrs)
         |> FontAwesome.view
         |> fromUnstyled

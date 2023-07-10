@@ -3,6 +3,7 @@ module ObjectTree exposing (..)
 import Cmn
 import Css exposing (..)
 import Dict exposing (Dict)
+import FontAwesome.Attributes
 import Html.Styled as Html exposing (..)
 import Html.Styled.Attributes as Attr exposing (css, value)
 import Html.Styled.Events exposing (..)
@@ -29,7 +30,11 @@ type alias ObjectTree =
 empty : ObjectTree
 empty =
     { filter = ""
-    , actions = Dict.empty
+    , actions =
+        Dict.fromList
+            [ ( addFileAction.key, addFileAction )
+            , ( mkdirAction.key, mkdirAction )
+            ]
     , objs = root
     , progresses = Dict.empty
     , renaming = Nothing
@@ -38,8 +43,36 @@ empty =
 
 type alias Action =
     { msg : String
-    , icon : String
+    , icon : Html Msg
+    , key : Int
     , click : Msg
+    }
+
+
+addFileAction : Action
+addFileAction =
+    { msg = "Load local file"
+    , icon = Style.iconFileImport [ FontAwesome.Attributes.lg ]
+    , key = 1
+    , click = DeleteSelected
+    }
+
+
+mkdirAction : Action
+mkdirAction =
+    { msg = "New folder"
+    , icon = Style.iconFolderPlus [ FontAwesome.Attributes.lg ]
+    , key = 2
+    , click = DeleteSelected
+    }
+
+
+deleteAction : Action
+deleteAction =
+    { msg = "Delete objects"
+    , icon = Style.iconTrash [ FontAwesome.Attributes.lg ]
+    , key = 100
+    , click = DeleteSelected
     }
 
 
@@ -51,7 +84,6 @@ type Tree
 type alias Folder =
     { name : String
     , children : Dict String Tree
-    , selected : Bool
     }
 
 
@@ -68,7 +100,6 @@ root =
     Parent
         { name = ""
         , children = Dict.empty
-        , selected = False
         }
 
 
@@ -77,7 +108,6 @@ newFolder name =
     Parent
         { name = name
         , children = Dict.empty
-        , selected = False
         }
 
 
@@ -115,7 +145,6 @@ putChild child tree =
             Parent
                 { name = x.name
                 , children = Dict.fromList [ ( nameOf child, child ) ]
-                , selected = False
                 }
 
 
@@ -163,8 +192,18 @@ member path =
 
 
 get : Path -> Tree -> Maybe Tree
-get path tree =
-    Debug.todo ""
+get path =
+    let
+        inner p tree =
+            case Debug.log "path" p of
+                [] ->
+                    Just tree
+
+                n :: ns ->
+                    getChild n tree
+                        |> Maybe.andThen (inner ns)
+    in
+    inner (List.reverse path)
 
 
 cut : Path -> Tree -> ( Maybe Tree, Tree )
@@ -215,7 +254,47 @@ put parent child =
                         |> Maybe.withDefault tree
     in
     inner (List.reverse parent)
-    
+
+
+updateAt : Path -> (Tree -> Tree) -> Tree -> Tree
+updateAt path upd tree =
+    get path tree
+        |> Maybe.map (\t -> put (List.drop 1 path) (upd t) tree)
+        |> Maybe.withDefault tree
+
+
+{-| Perform a test on **all** leaf descendants including this one.
+-}
+all : (Object -> Bool) -> Tree -> Bool
+all pred t =
+    case t of
+        Child x ->
+            pred x
+
+        Parent { children } ->
+            Dict.values children |> List.all (all pred)
+
+
+{-| Perform a test on **any** leaf descendants including this one.
+-}
+any : (Object -> Bool) -> Tree -> Bool
+any pred t =
+    case t of
+        Child x ->
+            pred x
+
+        Parent { children } ->
+            Dict.values children |> List.any (any pred)
+
+
+toggleSelected : Tree -> Tree
+toggleSelected t =
+    case t of
+        Parent x ->
+            t
+
+        Child x ->
+            Child { x | selected = not x.selected }
 
 
 type Msg
@@ -224,6 +303,8 @@ type Msg
     | RenameStart Path String
     | RenameChange String
     | RenameEnd
+    | ToggleSelected Path
+    | DeleteSelected
 
 
 {-| Tree path. Note that this expects to be in **reverse** order (leaf->root).
@@ -295,6 +376,15 @@ fromFlatTree =
     List.sortBy .path >> List.foldl item root
 
 
+insertDeleteAction : ObjectTree -> ObjectTree
+insertDeleteAction model =
+    if any .selected model.objs then
+        { model | actions = Dict.insert deleteAction.key deleteAction model.actions }
+
+    else
+        { model | actions = Dict.remove deleteAction.key model.actions }
+
+
 
 -- UPDATE
 
@@ -336,6 +426,17 @@ update msg model =
 
                         Err e ->
                             ( model, Notice.sendErr e )
+
+        ToggleSelected path ->
+            ( { model | objs = updateAt path toggleSelected model.objs }
+                |> insertDeleteAction
+            , Cmd.none
+            )
+
+        DeleteSelected ->
+            ( model
+            , Cmd.none
+            )
 
 
 recvSpatialObjects : List SpatialObject -> Tree -> Tree
@@ -411,7 +512,25 @@ tryRename path txt tree =
 view : ObjectTree -> Html Msg
 view tree =
     div []
-        [ treeView tree.objs tree.renaming ]
+        [ actionBar tree.actions
+        , treeView tree.objs tree.renaming
+        ]
+
+
+actionBar : Dict Int Action -> Html Msg
+actionBar actions =
+    Dict.values actions
+        |> List.map
+            (\{ msg, icon, click } ->
+                Style.button
+                    [ Attr.title msg
+                    , onClick click
+                    , css
+                        [ padding2 (px 2) (px 3) ]
+                    ]
+                    [ icon ]
+            )
+        |> div [ css [ displayFlex ] ]
 
 
 treeView : Tree -> Maybe ( Path, String ) -> Html Msg
@@ -422,7 +541,7 @@ treeView tree renaming =
             let
                 p =
                     if nameOf tr |> String.isEmpty then
-                        [ ]
+                        []
 
                     else
                         nameOf tr :: path
@@ -430,6 +549,9 @@ treeView tree renaming =
                 rename =
                     Cmn.maybeFilter (Tuple.first >> (==) p) renaming
                         |> Maybe.map Tuple.second
+
+                selected =
+                    all .selected tr
             in
             case tr of
                 Parent x ->
@@ -439,15 +561,28 @@ treeView tree renaming =
                                 | path = path
                                 , name = "Objects"
                                 , renameable = False
+                                , selected = selected
                             }
 
                          else
-                            { itemview | path = p, name = x.name, renaming = rename }
+                            { itemview
+                                | path = p
+                                , name = x.name
+                                , renaming = rename
+                                , selected = selected
+                            }
                         )
                         :: List.concatMap (item p) (Dict.values x.children)
 
                 Child x ->
-                    [ itemView { itemview | path = p, name = x.name, renaming = rename } ]
+                    [ itemView
+                        { itemview
+                            | path = p
+                            , name = x.name
+                            , renaming = rename
+                            , selected = selected
+                        }
+                    ]
     in
     div
         [ css
@@ -510,7 +645,7 @@ itemView iv =
                     , Attr.class Style.class.displayOnParentHover
                     , onClick (RenameStart iv.path iv.name)
                     ]
-                    [ Style.iconPen ]
+                    [ Style.iconPen [] ]
                 )
                 []
                 |> (::)
@@ -522,6 +657,12 @@ itemView iv =
                      )
                         [ css [ flex (int 1) ] ]
                         [ name ]
+                    )
+                |> (::)
+                    (Style.checkbox
+                        [ Attr.checked iv.selected
+                        , onClick <| ToggleSelected iv.path
+                        ]
                     )
     in
     div
