@@ -1,14 +1,16 @@
 module Style exposing (..)
 
 import Css exposing (..)
-import Svg
 import Css.Global
 import FontAwesome
 import FontAwesome.Attributes
+import FontAwesome.Regular
 import FontAwesome.Solid
 import Html.Styled as Html exposing (..)
 import Html.Styled.Attributes as Attr exposing (css)
 import Html.Styled.Events exposing (..)
+import Svg
+import Svg.Attributes
 
 
 type alias Theme =
@@ -35,14 +37,45 @@ class =
 
 globalCss : List Css.Global.Snippet
 globalCss =
-    [ Css.Global.button [ all unset ]
+    [ Css.Global.button
+        [ all unset
+        , color theme.ac1
+        , opacity (num 0.5)
+        , cursor pointer
+        , backgroundColor theme.bg1
+        , borderRadius (px 3)
+        , hover [ opacity (num 1), backgroundColor theme.bg2 ]
+        , pseudoClass "focus-visible" [ opacity (num 1) ]
+        ]
+
+    -- code
+    , Css.Global.code
+        [ backgroundColor theme.ac2
+        , padding2 (px 3) (px 5)
+        , borderRadius (px 5)
+        , fontSize (Css.em 0.9)
+        , fontFamilies [ "Fira Code", "monospace" ]
+        ]
+
+    -- pre
+    , Css.Global.pre
+        [ backgroundColor theme.ac2
+        , padding2 (px 3) (px 5)
+        , borderRadius (px 5)
+        , Css.Global.children
+            [ Css.Global.code
+                [ whiteSpace preWrap
+                , padding unset
+                ]
+            ]
+        ]
 
     -- title attribute
     , Css.Global.selector "*[title]:hover::after"
         [ property "content" "attr(title)"
         , position absolute
         , textAlign center
-        , fontSize (Css.em 0.5)
+        , fontSize (Css.rem 0.6)
         , padding2 (px 2) (px 4)
         , backgroundColor theme.ac1
         , color theme.bg1
@@ -82,15 +115,13 @@ panel1 child =
         [ child ]
 
 
-button : List (Attribute msg) -> List (Html msg) -> Html msg
-button =
+btnBordered : List (Attribute msg) -> List (Html msg) -> Html msg
+btnBordered =
     styled
         Html.button
-        [ color theme.ac1
-        , opacity (num 0.5)
-        , cursor pointer
-        , borderRadius (px 3)
-        , hover [ opacity (num 1), backgroundColor theme.bg2 ]
+        [ border3 (px 1) solid theme.ac1
+        , padding2 (px 3) (px 5)
+        , lineHeight (Css.em 1)
         ]
 
 
@@ -103,24 +134,32 @@ checkbox attrs =
         []
 
 
+defIconAttrs =
+    [ FontAwesome.Attributes.sm
+    , Svg.Attributes.style "margin: auto"
+    ]
+
+
 iconPen : List (Svg.Attribute Never) -> Html msg
 iconPen attrs =
     FontAwesome.Solid.pen
-        |> FontAwesome.styled (FontAwesome.Attributes.sm :: attrs)
+        |> FontAwesome.styled (defIconAttrs ++ attrs)
         |> FontAwesome.view
         |> fromUnstyled
+
 
 iconTrash : List (Svg.Attribute Never) -> Html msg
 iconTrash attrs =
     FontAwesome.Solid.trash
-        |> FontAwesome.styled (FontAwesome.Attributes.sm :: attrs)
+        |> FontAwesome.styled (defIconAttrs ++ attrs)
         |> FontAwesome.view
         |> fromUnstyled
+
 
 iconFileImport : List (Svg.Attribute Never) -> Html msg
 iconFileImport attrs =
     FontAwesome.Solid.fileImport
-        |> FontAwesome.styled (FontAwesome.Attributes.sm :: attrs)
+        |> FontAwesome.styled (defIconAttrs ++ attrs)
         |> FontAwesome.view
         |> fromUnstyled
 
@@ -128,6 +167,46 @@ iconFileImport attrs =
 iconFolderPlus : List (Svg.Attribute Never) -> Html msg
 iconFolderPlus attrs =
     FontAwesome.Solid.folderPlus
-        |> FontAwesome.styled (FontAwesome.Attributes.sm :: attrs)
+        |> FontAwesome.styled (defIconAttrs ++ attrs)
+        |> FontAwesome.view
+        |> fromUnstyled
+
+
+iconObjectRoot : List (Svg.Attribute Never) -> Html msg
+iconObjectRoot attrs =
+    FontAwesome.Regular.objectUngroup
+        |> FontAwesome.styled (defIconAttrs ++ attrs)
+        |> FontAwesome.view
+        |> fromUnstyled
+
+
+iconQuestionMark : List (Svg.Attribute Never) -> Html msg
+iconQuestionMark attrs =
+    FontAwesome.Solid.question
+        |> FontAwesome.styled (defIconAttrs ++ attrs)
+        |> FontAwesome.view
+        |> fromUnstyled
+
+
+iconSurface : List (Svg.Attribute Never) -> Html msg
+iconSurface attrs =
+    FontAwesome.Solid.mountain
+        |> FontAwesome.styled (defIconAttrs ++ attrs)
+        |> FontAwesome.view
+        |> fromUnstyled
+
+
+iconFolderClosed : List (Svg.Attribute Never) -> Html msg
+iconFolderClosed attrs =
+    FontAwesome.Solid.folder
+        |> FontAwesome.styled (defIconAttrs ++ attrs)
+        |> FontAwesome.view
+        |> fromUnstyled
+
+
+iconFolderOpen : List (Svg.Attribute Never) -> Html msg
+iconFolderOpen attrs =
+    FontAwesome.Solid.folderOpen
+        |> FontAwesome.styled (defIconAttrs ++ attrs)
         |> FontAwesome.view
         |> fromUnstyled

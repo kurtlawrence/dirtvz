@@ -44,7 +44,10 @@ async function viewerUi(element: HTMLElement | string) {
 
                 spawn()
                     .then(loader => loader.methods.read_load_and_store_from_spatial_file(DBNAME, file))
-                    .then(() => store.get_object_list())
+                    .then(toadd => {
+						APP.ports.merge_object_flat_tree.send(toadd);
+						return store.get_object_list();
+					})
                     .then(APP.ports.object_list.send)
                     .then(() => ElmMsg.ok('Stored object').send())
                     .catch((e) => ElmMsg.err(e.message).send());
@@ -54,6 +57,7 @@ async function viewerUi(element: HTMLElement | string) {
     });
 
     APP.ports.delete_spatial_object.subscribe(async (key: string) => {
+		console.debug(`Asked to delete ${key}`);
 		VWR?.unload_object(key);
 		await store.mark_deletion(key);
 		store.get_object_list().then(APP.ports.object_list.send);

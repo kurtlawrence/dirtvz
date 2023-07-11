@@ -1,7 +1,20 @@
 import { TriangleMeshSurface } from './wasm';
 
 export class SpatialObject {
-	constructor(public name: string | null, public obj: TriangleMeshSurface) { }
+	name: string = "";
+	key: string;
+	obj: TriangleMeshSurface;
+
+	private constructor(obj: TriangleMeshSurface) {
+		this.obj = obj;
+		this.key = crypto.randomUUID();
+	}
+
+	static triangle_mesh_surface(name: string, obj: TriangleMeshSurface): SpatialObject {
+		const x = new SpatialObject(obj);
+		x.name = name;
+		return x;
+	}
 }
 
 export async function parse_file(file: File): Promise<SpatialObject> {
@@ -27,7 +40,7 @@ export async function parse_file(file: File): Promise<SpatialObject> {
 
 			try {
 				let mesh = TriangleMeshSurface.from_vulcan_00t(data);
-				return new SpatialObject(name2, mesh);
+				return SpatialObject.triangle_mesh_surface(name2, mesh);
 			} catch (error) {
 				throw new Error('unable to Vulcan file: ' + error);
 			}

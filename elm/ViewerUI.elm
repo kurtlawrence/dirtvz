@@ -1,8 +1,9 @@
-module ViewerUI exposing (..)
+port module ViewerUI exposing (..)
 
 import Browser
-import FontAwesome.Styles
 import Css exposing (..)
+import Css.Global
+import FontAwesome.Styles
 import Html.Styled as H exposing (..)
 import Html.Styled.Attributes as A exposing (css)
 import Html.Styled.Events exposing (..)
@@ -12,7 +13,6 @@ import Ports exposing (HoverInfo)
 import Progress exposing (Progress)
 import SpatialObject exposing (SpatialObject)
 import Style
-import Css.Global 
 
 
 
@@ -106,7 +106,7 @@ update msg model =
         RecvProgress p ->
             case Progress.decode p of
                 Progress.Preprocessing key ->
-                    ObjectTree.update (ObjectTree.SetProgress p key) model.objs
+                    ObjectTree.update (ObjectTree.SetProgress { p | msg = "Preprocessing" } key) model.objs
                         |> liftUpdate ObjectTreeMsg (\x -> { model | objs = x })
 
                 Progress.Unknown ->
@@ -122,14 +122,22 @@ liftUpdate toMsg toModel =
 -- SUBSCRIPTIONS
 
 
+port merge_object_flat_tree : (ObjectTree.FlatTree -> msg) -> Sub msg
+
+
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
         [ Notice.get_notice (Notice.recv Notice)
-        , SpatialObject.objectList ObjectTree.RecvSpatialObjects
-            |> Sub.map ObjectTreeMsg
         , Ports.hoverInfo RecvHoverInfo
         , Progress.recv_progress RecvProgress
+
+        -- ObjectTree
+        , Sub.batch
+            [ SpatialObject.objectList ObjectTree.RecvSpatialObjects
+            , merge_object_flat_tree ObjectTree.MergeFlatTree
+            ]
+            |> Sub.map ObjectTreeMsg
         ]
 
 
@@ -191,20 +199,9 @@ objectListView =
                     , button [ onClick (DeleteObject x.key) ] [ text "delete" ]
                     , button [ onClick (ToggleLoaded x.key) ] [ text "load/unload" ]
                     ]
-                , maybeProgBar x
                 ]
         )
         >> div []
-
-
-maybeProgBar : SpatialObject -> Html
-maybeProgBar { status, prg } =
-    case ( status, prg ) of
-        ( "preprocessing", Just p ) ->
-            div [] [ Progress.viewBar False p ]
-
-        _ ->
-            div [] []
 
 
 hoverInfoView : HoverInfo -> Html
