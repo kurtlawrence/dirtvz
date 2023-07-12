@@ -1,8 +1,7 @@
 port module Ports exposing (..)
 
-import Json.Decode as D exposing (Value)
+import Json.Decode as D
 import Json.Decode.Pipeline as P
-import SpatialObject
 
 
 type alias HoverInfo =
@@ -39,7 +38,10 @@ port pick_spatial_file : () -> Cmd a
 port delete_spatial_object : String -> Cmd a
 
 
-port toggle_loaded : String -> Cmd a
+port object_load : String -> Cmd a
+
+
+port object_unload : String -> Cmd a
 
 
 hoverInfo : (Maybe HoverInfo -> msg) -> Sub msg

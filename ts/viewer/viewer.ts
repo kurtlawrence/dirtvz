@@ -127,7 +127,10 @@ export class Viewer {
         }
     }
 
-    private async load_object(key: string) {
+    async load_object(key: string) {
+        if (this.layers.is_loaded(key))
+            return;
+
         console.time(`loading object ${key}`);
         await this.layers.add_surface(key);
         this._dirty = true;
@@ -136,6 +139,9 @@ export class Viewer {
     }
 
 	async unload_object(key: string) {
+        if (!this.layers.is_loaded(key))
+            return;
+
 		this.layers.unload(key);
 		this.mark_dirty();
 	}

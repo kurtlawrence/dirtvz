@@ -7,6 +7,7 @@ import FontAwesome.Styles
 import Html.Styled as H exposing (..)
 import Html.Styled.Attributes as A exposing (css)
 import Html.Styled.Events exposing (..)
+import Html.Styled.Lazy as Lazy
 import Notice
 import ObjectTree exposing (ObjectTree)
 import Ports exposing (HoverInfo)
@@ -44,14 +45,14 @@ type Msg
     = Notice Notice.Notice
     | PickSpatialFile
     | DeleteObject ObjKey
-    | ToggleLoaded ObjKey
     | RecvHoverInfo (Maybe HoverInfo)
     | RecvProgress Progress
     | ObjectTreeMsg ObjectTree.Msg
 
 
 type alias Flags =
-    ()
+    { object_tree : Maybe ObjectTree.FlatTree
+    }
 
 
 type alias Html =
@@ -63,10 +64,16 @@ type alias ObjKey =
 
 
 init : Flags -> ( Model, Cmd Msg )
-init _ =
+init { object_tree } =
     ( { notice = Notice.None
       , hoverInfo = Nothing
-      , objs = ObjectTree.empty
+      , objs =
+            case object_tree of
+                Just x ->
+                    ObjectTree.withFlatTree x ObjectTree.empty
+
+                Nothing ->
+                    ObjectTree.empty
       }
     , Cmd.none
     )
@@ -96,9 +103,6 @@ update msg model =
                 , Notice.waiting Notice ("Deleting '" ++ key ++ "' from database")
                 ]
             )
-
-        ToggleLoaded key ->
-            ( model, Ports.toggle_loaded key )
 
         RecvHoverInfo info ->
             ( { model | hoverInfo = info }, Cmd.none )
@@ -156,8 +160,9 @@ view model =
         [ Css.Global.global Style.globalCss
         , FontAwesome.Styles.css |> fromUnstyled
         , div [ css [ displayFlex ] ]
-            [ Style.panel1 <|
-                (ObjectTree.view model.objs |> H.map ObjectTreeMsg)
+            [ Lazy.lazy ObjectTree.view model.objs
+              |> H.map ObjectTreeMsg
+              |> Style.panel1
             ]
         , div []
             [ node "dirtvz-viewer"
@@ -197,7 +202,6 @@ objectListView =
                     [ strong [] [ text x.key ]
                     , H.em [] [ text x.status ]
                     , button [ onClick (DeleteObject x.key) ] [ text "delete" ]
-                    , button [ onClick (ToggleLoaded x.key) ] [ text "load/unload" ]
                     ]
                 ]
         )

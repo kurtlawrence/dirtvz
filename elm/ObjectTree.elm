@@ -1,4 +1,4 @@
-module ObjectTree exposing (..)
+port module ObjectTree exposing (..)
 
 import Cmn
 import Css exposing (..)
@@ -7,11 +7,11 @@ import FontAwesome.Attributes
 import Html.Styled as Html exposing (..)
 import Html.Styled.Attributes as Attr exposing (css, value)
 import Html.Styled.Events exposing (..)
-import Json.Decode
 import List.Extra as Listx
 import Notice
 import Ports
 import Progress exposing (Progress)
+import Simple.Fuzzy as Fuzzy
 import SpatialObject exposing (SpatialObject)
 import Style
 
@@ -22,6 +22,7 @@ import Style
 
 type alias ObjectTree =
     { filter : String
+    , filterLoaded : Bool
     , actions : Dict Int Action
     , objs : Tree
     , progresses : Dict String Progress
@@ -33,6 +34,7 @@ type alias ObjectTree =
 empty : ObjectTree
 empty =
     { filter = ""
+    , filterLoaded = False
     , actions =
         Dict.fromList
             [ ( addFileAction.key, addFileAction )
@@ -43,6 +45,11 @@ empty =
     , renaming = Nothing
     , popup = Nothing
     }
+
+
+withFlatTree : FlatTree -> ObjectTree -> ObjectTree
+withFlatTree ft x =
+    { x | objs = fromFlatTree ft }
 
 
 type alias Action =
@@ -68,6 +75,33 @@ mkdirAction =
     , icon = Style.iconFolderPlus [ FontAwesome.Attributes.lg ]
     , key = 2
     , click = MakeDirectory
+    }
+
+
+moveToAction : Action
+moveToAction =
+    { msg = "Move to"
+    , icon = Style.iconFolderMove [ FontAwesome.Attributes.lg ]
+    , key = 20
+    , click = MoveSelected
+    }
+
+
+bulkLoadAction : Action
+bulkLoadAction =
+    { msg = "Load selected"
+    , icon = Style.iconSolidEye [ FontAwesome.Attributes.lg ]
+    , key = 50
+    , click = LoadSelected
+    }
+
+
+bulkUnloadAction : Action
+bulkUnloadAction =
+    { msg = "Unload selected"
+    , icon = Style.iconEmptyEye [ FontAwesome.Attributes.lg ]
+    , key = 51
+    , click = UnloadSelected
     }
 
 
@@ -186,12 +220,9 @@ member : Path -> Tree -> Bool
 member path =
     let
         inner p tree =
-            case p of
+            case Debug.log "path" p of
                 [] ->
-                    False
-
-                n :: [] ->
-                    nameOf tree == n
+                    True
 
                 n :: ns ->
                     getChild n tree
@@ -245,9 +276,22 @@ cut path =
     inner (List.reverse path)
 
 
+{-| This will create a path if one doesn't exist.
+-}
 move : Path -> Path -> Tree -> Tree
-move node under tree =
-    Debug.todo ""
+move under node tree =
+    case cut node tree of
+        ( Just n, tr ) ->
+            -- create a path if doesnt exist
+            put under n <|
+                if member under tree then
+                    tr
+
+                else
+                    putNewFolder under tr
+
+        ( Nothing, tr ) ->
+            tr
 
 
 put : Path -> Tree -> Tree -> Tree
@@ -333,18 +377,20 @@ merge a b =
 
 
 {-| Perform a test on **all** leaf descendants including this one.
+|
 -}
-all : (Object -> Bool) -> Tree -> Bool
-all pred t =
+all : (Object -> Bool) -> Bool -> Tree -> Bool
+all pred emptyFolder t =
     case t of
         Child x ->
             pred x
 
         Parent { children } ->
-            Dict.isEmpty children
-                |> not
-                |> (&&)
-                    (Dict.values children |> List.all (all pred))
+            if Dict.isEmpty children then
+                emptyFolder
+
+            else
+                Dict.values children |> List.all (all pred emptyFolder)
 
 
 {-| Perform a test on **any** leaf descendants including this one.
@@ -385,6 +431,25 @@ filter pred tree =
             Parent { x | children = reduce x.children }
 
 
+{-| Reduce the tree only keep leaves along `path`.
+| This differs to `get` in that the tree is still rooted.
+-}
+filterTo : Path -> Tree -> Tree
+filterTo path =
+    let
+        inner p tree =
+            case p of
+                [] ->
+                    Just tree
+
+                n :: ns ->
+                    getChild n tree
+                        |> Maybe.andThen (inner ns)
+                        |> Maybe.map (\ch -> newFolder (nameOf tree) |> putChild ch)
+    in
+    inner (List.reverse path) >> Maybe.withDefault root
+
+
 toggleSelected : Bool -> Tree -> Tree
 toggleSelected s t =
     case t of
@@ -414,6 +479,16 @@ toggleCollapsed c t =
             Child x
 
 
+toggleLoaded : Bool -> Tree -> Tree
+toggleLoaded s t =
+    case t of
+        Parent x ->
+            Parent { x | children = Dict.map (\_ -> toggleLoaded s) x.children }
+
+        Child x ->
+            Child { x | loaded = s }
+
+
 type Msg
     = RecvSpatialObjects (List SpatialObject)
     | SetProgress Progress String
@@ -423,13 +498,23 @@ type Msg
     | RenameEnd
     | ToggleSelected Path
     | ToggleCollapsed Path
+    | ToggleLoaded Path
+    | LoadSelected
+    | UnloadSelected
     | DeleteSelected
     | DeleteSelectedDo FlatTree
+    | DeleteFolder Path
     | PickObjectFile
     | MergeFlatTree FlatTree
     | MakeDirectory
     | MakeDirectoryChg String
     | MakeDirectoryDo String
+    | Persist
+    | MoveSelected
+    | MoveToDirChg String
+    | MoveToDo String
+    | FilterChg String
+    | ToggleLoadedFilter
 
 
 {-| Tree path. Note that this expects to be in **reverse** order (leaf->root).
@@ -528,6 +613,38 @@ insertDeleteAction model =
         { model | actions = Dict.remove deleteAction.key model.actions }
 
 
+insertMoveToAction : ObjectTree -> ObjectTree
+insertMoveToAction model =
+    if any .selected model.objs then
+        { model | actions = Dict.insert moveToAction.key moveToAction model.actions }
+
+    else
+        { model | actions = Dict.remove moveToAction.key model.actions }
+
+
+insertBulkLoadUnloadAction : ObjectTree -> ObjectTree
+insertBulkLoadUnloadAction model =
+    let
+        selected =
+            filter .selected model.objs
+
+        rm a m =
+            { m | actions = Dict.remove a.key m.actions }
+        add a m =
+            { m | actions = Dict.insert a.key a m.actions }
+           
+    in
+    case ( any (always True) selected, any .loaded selected, all .loaded True selected ) of
+        ( False, _, _ ) ->
+            rm bulkLoadAction model |> rm bulkUnloadAction
+        ( True, False, _ ) ->
+            rm bulkUnloadAction model |> add bulkLoadAction
+        ( True, _, True ) ->
+            add bulkUnloadAction model |> rm bulkLoadAction
+        _ ->
+            add bulkUnloadAction model |> add bulkLoadAction
+
+
 
 -- UPDATE
 
@@ -567,7 +684,7 @@ update msg model =
                     case tryRename path txt model.objs of
                         Ok tree ->
                             ( { model | renaming = Nothing, objs = tree }
-                            , Cmd.none
+                            , Cmn.cmd Persist
                             )
 
                         Err e ->
@@ -577,11 +694,13 @@ update msg model =
             let
                 s =
                     get path model.objs
-                        |> Maybe.map (all .selected >> not)
+                        |> Maybe.map (all .selected False >> not)
                         |> Maybe.withDefault False
             in
             ( { model | objs = updateAt path (toggleSelected s) model.objs }
                 |> insertDeleteAction
+                |> insertMoveToAction
+                |> insertBulkLoadUnloadAction
             , Cmd.none
             )
 
@@ -604,6 +723,64 @@ update msg model =
             , Cmd.none
             )
 
+        ToggleLoaded path ->
+            let
+                l =
+                    get path model.objs
+                        |> Maybe.map (\t -> all .loaded True t && any .loaded t)
+                        |> Maybe.map not
+                        |> Maybe.withDefault False
+
+                objs =
+                    updateAt path (toggleLoaded l) model.objs
+
+                portFn =
+                    if l then
+                        Ports.object_load
+
+                    else
+                        Ports.object_unload
+            in
+            ( { model | objs = objs } |> insertBulkLoadUnloadAction
+            , filterTo path objs
+                |> toFlatTree
+                |> List.filter (.key >> String.isEmpty >> not)
+                |> List.map (.key >> portFn)
+                |> Cmd.batch
+            )
+
+        LoadSelected ->
+            let
+                toload =
+                    filter .selected model.objs
+                        |> filter (.loaded >> not)
+                        |> toFlatTree
+                        |> List.filter (.key >> String.isEmpty >> not)
+
+                objs =
+                    List.map (.path >> strToPath) toload
+                        |> List.foldl (\p -> updateAt p (toggleLoaded True)) model.objs
+            in
+            ( { model | objs = objs } |> insertBulkLoadUnloadAction
+            , List.map (.key >> Ports.object_load) toload |> Cmd.batch
+            )
+
+        UnloadSelected ->
+            let
+                tounload =
+                    filter .selected model.objs
+                        |> filter .loaded
+                        |> toFlatTree
+                        |> List.filter (.key >> String.isEmpty >> not)
+
+                objs =
+                    List.map (.path >> strToPath) tounload
+                        |> List.foldl (\p -> updateAt p (toggleLoaded False)) model.objs
+            in
+            ( { model | objs = objs } |> insertBulkLoadUnloadAction
+            , List.map (.key >> Ports.object_unload) tounload |> Cmd.batch
+            )
+
         DeleteSelected ->
             ( { model | popup = Just <| deletePopup model }
             , Cmd.none
@@ -615,12 +792,15 @@ update msg model =
                 |> Cmd.batch
             )
 
+        DeleteFolder path ->
+            ( { model | objs = cut path model.objs |> Tuple.second }, Cmd.none )
+
         PickObjectFile ->
             ( model, Ports.pick_spatial_file () )
 
         MergeFlatTree ft ->
             ( { model | objs = merge (fromFlatTree ft) model.objs }
-            , Cmd.none
+            , Cmn.cmd Persist
             )
 
         MakeDirectory ->
@@ -647,8 +827,36 @@ update msg model =
                     | objs = putNewFolder path model.objs
                     , popup = Nothing
                   }
-                , Cmd.none
+                , Cmn.cmd Persist
                 )
+
+        Persist ->
+            ( model, persist_object_tree <| toFlatTree model.objs )
+
+        MoveSelected ->
+            ( { model | popup = Just <| moveToPopup model "" }, Cmd.none )
+
+        MoveToDirChg p ->
+            ( { model | popup = Just <| moveToPopup model p }, Cmd.none )
+
+        MoveToDo to ->
+            extractMoveNodes model.objs
+                |> Debug.log "moveNodes"
+                |> List.foldl (move (strToPath to)) model.objs
+                |> (\o ->
+                        ( { model
+                            | objs = o
+                            , popup = Nothing
+                          }
+                        , Cmn.cmd Persist
+                        )
+                   )
+
+        FilterChg f ->
+            ( { model | filter = f }, Cmd.none )
+
+        ToggleLoadedFilter ->
+            ( { model | filterLoaded = not model.filterLoaded }, Cmd.none )
 
 
 recvSpatialObjects : List SpatialObject -> Tree -> Tree
@@ -723,6 +931,65 @@ tryRename path txt tree =
                 Ok tree
 
 
+{-| Extract the root node used to move an item.
+| We assume that the nodes live in the same directory.
+-}
+extractMoveNodes : Tree -> List Path
+extractMoveNodes tree =
+    let
+        ft =
+            filter .selected tree |> toFlatTree
+
+        pr =
+            commonRoot ft |> Debug.log "commonRoot"
+    in
+    List.map .path ft
+        |> List.filter (String.startsWith pr)
+        |> Listx.filterNot ((==) pr)
+        |> Debug.log "startsWith"
+        |> List.map strToPath
+
+
+commonRoot : FlatTree -> String
+commonRoot =
+    let
+        inner ps =
+            let
+                ( head, rem ) =
+                    List.filterMap Listx.uncons ps |> List.unzip
+            in
+            if
+                List.isEmpty head
+                    || List.head head
+                    /= Listx.last head
+            then
+                ""
+
+            else
+                Maybe.withDefault "" (List.head head) ++ "/" ++ inner rem
+    in
+    List.map .path
+        >> List.filter (String.endsWith "/")
+        >> List.map (String.dropRight 1)
+        >> Debug.log "paths"
+        >> List.map (String.split "/")
+        >> inner
+        >> (\s ->
+                if String.startsWith "/" s then
+                    String.dropLeft 1 s
+
+                else
+                    s
+           )
+
+
+
+-- PORTS
+
+
+port persist_object_tree : FlatTree -> Cmd a
+
+
 
 -- VIEW
 
@@ -731,8 +998,25 @@ view : ObjectTree -> Html Msg
 view tree =
     div []
         [ Maybe.map Cmn.popup tree.popup |> Maybe.withDefault (div [] [])
+        , filterRow tree
         , actionBar tree.actions
         , treeView tree
+        ]
+
+
+filterRow : ObjectTree -> Html Msg
+filterRow model =
+    div [ css [ displayFlex ] ]
+        [ Cmn.textInput model.filter
+            FilterChg
+            [ css [ flex (int 1), flexBasis (pct 100), textAlign center ]
+            , Attr.placeholder "Filter objects"
+            ]
+        , button
+            [ Attr.title "Loaded/unloaded"
+            , onClick ToggleLoadedFilter
+            ]
+            [ Style.iconLoadedFilterToggle [] ]
         ]
 
 
@@ -776,7 +1060,10 @@ treeView tree =
                         |> Maybe.map Tuple.second
 
                 selected =
-                    all .selected tr
+                    all .selected False tr
+
+                loaded =
+                    all .loaded True tr && any .loaded tr
             in
             case tr of
                 Parent x ->
@@ -787,10 +1074,11 @@ treeView tree =
                                 , name = "Objects"
                                 , renameable = False
                                 , selected = selected
+                                , loaded = loaded
                                 , icon =
                                     button
                                         [ Attr.title "Collapse all"
-                                        , onClick <| ToggleCollapsed []
+                                        , Cmn.onClickStopProp <| ToggleCollapsed []
                                         ]
                                         [ Style.iconObjectRoot [] ]
                             }
@@ -801,18 +1089,20 @@ treeView tree =
                                 , name = name
                                 , renaming = rename
                                 , selected = selected
+                                , loaded = loaded
+                                , deletable = not <| any (always True) tr
                                 , icon =
                                     if x.collapsed then
                                         button
                                             [ Attr.title "Open"
-                                            , onClick <| ToggleCollapsed p
+                                            , Cmn.onClickStopProp <| ToggleCollapsed p
                                             ]
                                             [ Style.iconFolderClosed [] ]
 
                                     else
                                         button
                                             [ Attr.title "Collapse"
-                                            , onClick <| ToggleCollapsed p
+                                            , Cmn.onClickStopProp <| ToggleCollapsed p
                                             ]
                                             [ Style.iconFolderOpen [] ]
                             }
@@ -821,7 +1111,9 @@ treeView tree =
                                 []
 
                             else
-                                List.concatMap (item p) (Dict.values x.children)
+                                Dict.values x.children
+                                    |> Listx.stableSortWith viewSortOrder
+                                    |> List.concatMap (item p)
                            )
 
                 Child x ->
@@ -831,6 +1123,7 @@ treeView tree =
                             , name = name
                             , renaming = rename
                             , selected = selected
+                            , loaded = loaded
                             , deleting = x.status == SpatialObject.deleting
                             , progress =
                                 Dict.get x.key tree.progresses
@@ -843,13 +1136,41 @@ treeView tree =
                         }
                     ]
     in
-    div
-        [ css
-            [ overflowY auto
+    (if tree.filterLoaded then
+        filter .loaded tree.objs
+
+     else
+        tree.objs
+    )
+        |> (\objs ->
+                if String.isEmpty tree.filter then
+                    objs
+
+                else
+                    filter (.name >> Fuzzy.match tree.filter) objs
+           )
+        |> item []
+        |> div
+            [ css
+                [ overflowY auto
+                ]
             ]
-        ]
-    <|
-        item [] (Debug.log "tree" tree.objs)
+
+
+viewSortOrder : Tree -> Tree -> Order
+viewSortOrder a b =
+    case ( a, b ) of
+        ( Parent _, Parent _ ) ->
+            EQ
+
+        ( Child _, Child _ ) ->
+            EQ
+
+        ( Parent _, _ ) ->
+            LT
+
+        _ ->
+            GT
 
 
 type alias ItemView =
@@ -857,6 +1178,7 @@ type alias ItemView =
     , name : String
     , renaming : Maybe String
     , renameable : Bool
+    , deletable : Bool
     , deleting : Bool
     , selected : Bool
     , loaded : Bool
@@ -872,6 +1194,7 @@ itemview =
     , name = ""
     , renaming = Nothing
     , renameable = True
+    , deletable = False
     , deleting = False
     , selected = False
     , loaded = False
@@ -897,27 +1220,38 @@ itemView iv =
                     text iv.name
 
                 Just txt ->
-                    input
-                        [ value txt
-                        , onInput RenameChange
-                        , onBlur RenameEnd
+                    Cmn.textInput txt
+                        RenameChange
+                        [ onBlur RenameEnd
                         , Cmn.onEnter RenameEnd
                         ]
-                        []
+
+        rowBtnStyle =
+            css [ padding2 (px 2) (px 2) ]
 
         row =
-            madd iv.renameable
+            madd iv.deletable
                 (button
-                    [ Attr.title "Rename"
+                    [ Attr.title "Delete"
                     , Attr.class Style.class.displayOnParentHover
-                    , onClick (RenameStart iv.path iv.name)
+                    , Cmn.onClickStopProp (DeleteFolder iv.path)
+                    , rowBtnStyle
                     ]
-                    [ Style.iconPen [] ]
+                    [ Style.iconTrash [] ]
                 )
                 []
+                |> madd iv.renameable
+                    (button
+                        [ Attr.title "Rename"
+                        , Attr.class Style.class.displayOnParentHover
+                        , Cmn.onClickStopProp (RenameStart iv.path iv.name)
+                        , rowBtnStyle
+                        ]
+                        [ Style.iconPen [] ]
+                    )
                 |> (::)
                     ((if iv.loaded then
-                        Html.em
+                        Html.strong
 
                       else if iv.deleting then
                         Html.del
@@ -925,10 +1259,16 @@ itemView iv =
                       else
                         span
                      )
-                        [ css [ flex (int 1) ] ]
+                        [ css
+                            [ flex (int 1)
+                            , whiteSpace noWrap
+                            , overflow hidden
+                            , textOverflow ellipsis
+                            ]
+                        ]
                         [ name ]
                     )
-                |> (::) (div [ css [ padding2 zero (px 3) ] ] [ iv.icon ])
+                |> (::) (div [ css [ padding2 zero (px 4) ] ] [ iv.icon ])
                 |> (::)
                     (div
                         [ css
@@ -945,7 +1285,7 @@ itemView iv =
                 |> (::)
                     (Style.checkbox
                         [ Attr.checked iv.selected
-                        , onClick <| ToggleSelected iv.path
+                        , Cmn.onClickStopProp <| ToggleSelected iv.path
                         ]
                     )
     in
@@ -959,6 +1299,7 @@ itemView iv =
                 [ displayFlex
                 , hover [ backgroundColor Style.theme.bg2 ]
                 ]
+            , onClick <| ToggleLoaded iv.path
             ]
             row
         , div
@@ -1023,12 +1364,9 @@ makeDirPopup model path =
     Cmn.Popup
         "Create a folder"
         (div []
-            [ input
-                [ css [ width (px 450) ]
-                , value path
-                , onInput MakeDirectoryChg
-                ]
-                []
+            [ Cmn.textInput path
+                MakeDirectoryChg
+                [ css [ width (px 450) ] ]
             , Html.pre [ css [ displayFlex, flexDirection column ] ] objs
             ]
         )
@@ -1036,3 +1374,54 @@ makeDirPopup model path =
         ClosePopup
         "Create"
         (MakeDirectoryDo path)
+
+
+moveToPopup : ObjectTree -> String -> Cmn.Popup Msg
+moveToPopup model path =
+    let
+        count =
+            filter .selected model.objs |> toFlatTree |> List.length |> String.fromInt
+
+        objs =
+            toFlatTree model.objs
+                |> List.map .path
+                |> List.filter (String.endsWith "/")
+                |> Listx.unique
+                |> List.map
+                    (\x ->
+                        code
+                            [ onClick <| MoveToDirChg x
+                            , css
+                                [ hover
+                                    [ backgroundColor Style.theme.bg1
+                                    , cursor pointer
+                                    ]
+                                ]
+                            ]
+                            [ text x ]
+                    )
+
+        create =
+            if String.isEmpty path then
+                div [] [ Html.em [] [ text "Move to root" ] ]
+
+            else if member (strToPath path) model.objs then
+                div [] []
+
+            else
+                div [] [ Html.em [] [ text <| "Folder '" ++ path ++ "' will be created" ] ]
+    in
+    Cmn.Popup
+        ("Move " ++ count ++ " items to folder")
+        (div []
+            [ Cmn.textInput path
+                MoveToDirChg
+                [ css [ width (px 450) ] ]
+            , Html.pre [ css [ displayFlex, flexDirection column ] ] objs
+            , create
+            ]
+        )
+        "Cancel"
+        ClosePopup
+        "Move"
+        (MoveToDo path)

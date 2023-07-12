@@ -48,6 +48,21 @@ globalCss =
         , pseudoClass "focus-visible" [ opacity (num 1) ]
         ]
 
+    -- text input
+    , Css.Global.selector "input[type=text]"
+        [ property "background" "none"
+        , border3 (px 1) solid theme.ac2
+        , borderRadius (vh 50)
+        , margin (px 2)
+        , padding2 (px 2) (px 10)
+        , fontSize (Css.em 0.8)
+        , display inlineBlock
+        , pseudoClass "focus-visible"
+            [ outline3 (px 1) solid theme.ac2
+            , borderColor theme.ac1
+            ]
+        ]
+
     -- code
     , Css.Global.code
         [ backgroundColor theme.ac2
@@ -207,6 +222,40 @@ iconFolderClosed attrs =
 iconFolderOpen : List (Svg.Attribute Never) -> Html msg
 iconFolderOpen attrs =
     FontAwesome.Solid.folderOpen
+        |> FontAwesome.styled (defIconAttrs ++ attrs)
+        |> FontAwesome.view
+        |> fromUnstyled
+
+
+iconFolderMove : List (Svg.Attribute Never) -> Html msg
+iconFolderMove attrs =
+    FontAwesome.Solid.upDownLeftRight
+        |> FontAwesome.styled (defIconAttrs ++ attrs)
+        |> FontAwesome.view
+        |> fromUnstyled
+
+
+
+iconLoadedFilterToggle : List (Svg.Attribute Never) -> Html msg
+iconLoadedFilterToggle attrs =
+    FontAwesome.Solid.eye
+        |> FontAwesome.styled (defIconAttrs ++ attrs)
+        |> FontAwesome.view
+        |> fromUnstyled
+
+
+
+iconSolidEye : List (Svg.Attribute Never) -> Html msg
+iconSolidEye attrs =
+    FontAwesome.Solid.eye
+        |> FontAwesome.styled (defIconAttrs ++ attrs)
+        |> FontAwesome.view
+        |> fromUnstyled
+
+
+iconEmptyEye : List (Svg.Attribute Never) -> Html msg
+iconEmptyEye attrs =
+    FontAwesome.Regular.eye
         |> FontAwesome.styled (defIconAttrs ++ attrs)
         |> FontAwesome.view
         |> fromUnstyled
