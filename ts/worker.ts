@@ -4,6 +4,7 @@ import * as local_loader from './local-loader';
 import { Store } from './store';
 import * as wasm from './wasm';
 import * as prgrs from './prg-stream';
+import { FlatTreeItem } from './spatial-obj';
 
 const api = {
 	read_load_and_store_from_spatial_file,
@@ -15,11 +16,16 @@ export type WorkerApi = typeof api;
 
 exposeApi(api);
 
-async function read_load_and_store_from_spatial_file(db_name: string, file: File) {
+async function read_load_and_store_from_spatial_file(
+	db_name: string,
+	file: File
+): Promise<FlatTreeItem[]> {
 	let obj = await local_loader.parse_file(file);
 
 	let db = await Store.connect(db_name);
-	await db.store_object(obj.name ?? 'new-object', obj.obj);
+	await db.store_object(obj.key, obj.obj);
+
+	return [{ path: obj.name, key: obj.key, status: null }];
 }
 
 /** Returns if the data extent were changed. */

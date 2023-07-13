@@ -3,8 +3,9 @@ port module Progress exposing (..)
 import Cmn
 import Css exposing (..)
 import Html.Styled exposing (..)
-import Html.Styled.Attributes exposing (css, href, src)
+import Html.Styled.Attributes exposing (css, title)
 import Html.Styled.Events exposing (onClick)
+import Style
 
 
 type alias Progress =
@@ -32,20 +33,22 @@ decode { msg } =
             Unknown
 
 
-viewBar : Bool -> Progress -> Html a
-viewBar showMsg { msg, iter, outof } =
-    div [ css [ width (pct 100), height (Css.em 1) ] ]
-        [ span [] <|
-            if showMsg then
-                [ text msg ]
+viewBar : Progress -> Html a
+viewBar { msg, iter, outof } =
+    div
+        (css [ width (pct 100), height (px 4), backgroundColor Style.theme.ac2 ]
+            :: (if String.isEmpty msg then
+                    []
 
-            else
-                []
-        , div
+                else
+                    [ title msg ]
+               )
+        )
+        [ div
             [ css
                 [ width (pct <| toFloat iter / toFloat outof * 100)
                 , height (pct 100)
-                , backgroundColor Cmn.theme.primary1
+                , backgroundColor Style.theme.ac1
                 ]
             ]
             []

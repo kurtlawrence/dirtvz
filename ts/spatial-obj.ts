@@ -52,3 +52,9 @@ function bsearch(array: number[], value: number): number {
 
     return -1;
 }
+
+export type FlatTreeItem = {
+	path: string,
+	key: string,
+	status: string | null,
+};

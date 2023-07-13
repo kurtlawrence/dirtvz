@@ -1,7 +1,7 @@
 import { Viewer } from "./viewer/viewer";
 import { spawn, spawn_pool } from './worker-spawn';
 import { Store } from './store';
-import { Status } from "./spatial-obj";
+import { FlatTreeItem, Status } from "./spatial-obj";
 import { prog_channel } from "./prg-stream";
 
 export { viewerUi };
@@ -17,7 +17,9 @@ async function viewerUi(element: HTMLElement | string) {
 
     customElements.define("dirtvz-viewer", CanvasRenderer);
 
-    const flags = {};
+    const flags = {
+        object_tree: PersistObjectTree.get(DBNAME),
+    };
 
     APP = require('./../js/viewer-ui.js').Elm.ViewerUI.init({
         node,
@@ -44,7 +46,10 @@ async function viewerUi(element: HTMLElement | string) {
 
                 spawn()
                     .then(loader => loader.methods.read_load_and_store_from_spatial_file(DBNAME, file))
-                    .then(() => store.get_object_list())
+                    .then(toadd => {
+                        APP.ports.merge_object_flat_tree.send(toadd);
+                        return store.get_object_list();
+                    })
                     .then(APP.ports.object_list.send)
                     .then(() => ElmMsg.ok('Stored object').send())
                     .catch((e) => ElmMsg.err(e.message).send());
@@ -54,18 +59,27 @@ async function viewerUi(element: HTMLElement | string) {
     });
 
     APP.ports.delete_spatial_object.subscribe(async (key: string) => {
-		VWR?.unload_object(key);
-		await store.mark_deletion(key);
-		store.get_object_list().then(APP.ports.object_list.send);
+        console.debug(`Asked to delete ${key}`);
+        VWR?.unload_object(key);
+        await store.mark_deletion(key);
+        store.get_object_list().then(APP.ports.object_list.send);
 
         await store.delete_object(key);
         ElmMsg.ok(`Deleted ${key}`).send();
-		store.get_object_list().then(APP.ports.object_list.send);
+        store.get_object_list().then(APP.ports.object_list.send);
     });
 
-    APP.ports.toggle_loaded.subscribe((key: string) => {
-        VWR?.toggle_object(key);
+    APP.ports.object_load.subscribe((key: string) => {
+        console.debug(`Please load ${key}`);
+        VWR?.load_object(key);
     });
+    APP.ports.object_unload.subscribe((key: string) => {
+        console.debug(`Please unload ${key}`);
+        VWR?.unload_object(key);
+    });
+
+    APP.ports.persist_object_tree.subscribe((x: FlatTreeItem[]) =>
+        PersistObjectTree.store(DBNAME, x));
 }
 
 class ElmMsg {
@@ -90,49 +104,51 @@ class ElmMsg {
 
 class CanvasRenderer extends HTMLElement {
     canvas: HTMLCanvasElement;
-	obs?: ResizeObserver;
+    obs?: ResizeObserver;
+    resize_timeout: any;
 
     constructor() {
         super();
 
         const canvas = document.createElement("canvas");
         this.canvas = canvas;
+        this.canvas.style.display = 'block';
     }
 
     connectedCallback() {
-		this.obs = new ResizeObserver(e => this.sizeCanvas(e[0]));
-		this.obs.observe(this);
+        this.obs = new ResizeObserver(e => {
+            clearTimeout(this.resize_timeout);
+            this.resize_timeout = setTimeout(() => this.sizeCanvas(e[0]), 100);
+        });
+        this.obs.observe(this);
+        this.obs.observe(document.body);
 
         this.appendChild(this.canvas);
 
         Viewer.init(this.canvas, DBNAME).then((x) => {
             x.onhover(info => {
-				// console.debug(info);
-				APP?.ports.hover_info.send(JSON.stringify(info));
-			});
+                // console.debug(info);
+                APP?.ports.hover_info.send(JSON.stringify(info));
+            });
             VWR = x;
         });
     }
 
     disconnectedCallback() {
         VWR = undefined;
-		this.obs?.disconnect();
-		this.obs = undefined;
+        this.obs?.disconnect();
+        this.obs = undefined;
         this.removeChild(this.canvas);
     }
 
-	sizeCanvas(size: ResizeObserverEntry) {
-		const width = `${size.contentBoxSize[0].inlineSize}px`;
-		const height = `${size.contentBoxSize[0].blockSize}px`;
-		const chgd = 
-			this.canvas.style.width !== width || this.canvas.style.height !== height;
-
-        this.canvas.style.width = width;
-        this.canvas.style.height = height;
-
-		if (chgd)
-			VWR?.canvas_size_changed();
-	}
+    sizeCanvas(size: ResizeObserverEntry) {
+        this.removeChild(this.canvas);
+        const rect = this.getBoundingClientRect();
+        this.canvas.height = rect.height;
+        this.canvas.width = rect.width;
+        this.appendChild(this.canvas);
+        VWR?.canvas_size_changed();
+    }
 }
 
 function routeNotice(app: any) {
@@ -155,10 +171,10 @@ async function start_preprocessing_interval(app: any, store: Store, millis: numb
 
         for (const x of tostart) {
             try {
-				// begin a progress stream
-				const stream = prog_channel({
-					recv(prg) { APP?.ports.recv_progress.send(prg); }
-				});
+                // begin a progress stream
+                const stream = prog_channel({
+                    recv(prg) { APP?.ports.recv_progress.send(prg); }
+                });
 
                 // fork off the processing onto a worker
                 const timerkey = `preprocess: ${x.key}`;
@@ -186,4 +202,18 @@ async function start_preprocessing_interval(app: any, store: Store, millis: numb
             }
         }
     }, millis);
+}
+
+class PersistObjectTree {
+    static store(db_name: string, flat_tree: FlatTreeItem[]) {
+        localStorage.setItem(`${db_name}/object-tree`, JSON.stringify(flat_tree));
+    }
+
+    static get(db_name: string): FlatTreeItem[] | null {
+        const x = localStorage.getItem(`${db_name}/object-tree`);
+        if (x)
+            return JSON.parse(x);
+        else
+            return null;
+    }
 }

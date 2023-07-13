@@ -100,9 +100,10 @@ export class Store {
 
 	async delete_object(obj: string) {
 		const sobj = await this.find_object(obj);
-		const sobjs = await this.get_object_list();
-		const update_sobjs = this.transact('root', 'readwrite', store =>
-			store.put(Key.ObjList, sobjs.filter(x => x.key != obj)));
+		const update_sobjs = this.transact('root', 'readwrite', async store => {
+			const sobjs = await store.get<SpatialObject[]>(Key.ObjList) ?? [];
+			return store.put(Key.ObjList, sobjs.filter(x => x.key != obj));
+		});
 
 		const rm_raw = this.transact('raw-objs', 'readwrite', store =>
 			store.delete(obj));

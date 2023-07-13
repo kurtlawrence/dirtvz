@@ -114,9 +114,9 @@ export class Viewer {
 
 	canvas_size_changed() {
 		console.debug('canvas size changed');
+        this.camera.redoAspectRatio(this.canvas);
 		this.scene.render();
 	}
-
 
     async toggle_object(key: string) {
         if (this.layers.is_loaded(key)) {
@@ -127,15 +127,21 @@ export class Viewer {
         }
     }
 
-    private async load_object(key: string) {
+    async load_object(key: string) {
+        if (this.layers.is_loaded(key))
+            return;
+
         console.time(`loading object ${key}`);
         await this.layers.add_surface(key);
-        this._dirty = true;
         console.timeEnd(`loading object ${key}`);
         await this.update_in_view_tiles();
+        this.mark_dirty();
     }
 
 	async unload_object(key: string) {
+        if (!this.layers.is_loaded(key))
+            return;
+
 		this.layers.unload(key);
 		this.mark_dirty();
 	}

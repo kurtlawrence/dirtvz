@@ -13,6 +13,16 @@ type alias SpatialObject =
     }
 
 
+preprocessing : String
+preprocessing =
+    "preprocessing"
+
+
+deleting : String
+deleting =
+    "deleting"
+
+
 decode : D.Decoder SpatialObject
 decode =
     D.succeed SpatialObject

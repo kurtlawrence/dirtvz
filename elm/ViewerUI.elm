@@ -1,14 +1,19 @@
-module ViewerUI exposing (..)
+port module ViewerUI exposing (..)
 
 import Browser
 import Css exposing (..)
+import Css.Global
+import FontAwesome.Styles
 import Html.Styled as H exposing (..)
 import Html.Styled.Attributes as A exposing (css)
 import Html.Styled.Events exposing (..)
+import Html.Styled.Lazy as Lazy
 import Notice
+import ObjectTree exposing (ObjectTree)
 import Ports exposing (HoverInfo)
 import Progress exposing (Progress)
 import SpatialObject exposing (SpatialObject)
+import Style
 
 
 
@@ -31,7 +36,7 @@ main =
 
 type alias Model =
     { notice : Notice.Notice
-    , objList : List SpatialObject
+    , objs : ObjectTree
     , hoverInfo : Maybe HoverInfo
     }
 
@@ -39,15 +44,15 @@ type alias Model =
 type Msg
     = Notice Notice.Notice
     | PickSpatialFile
-    | RecvObjectList (List SpatialObject)
     | DeleteObject ObjKey
-    | ToggleLoaded ObjKey
     | RecvHoverInfo (Maybe HoverInfo)
     | RecvProgress Progress
+    | ObjectTreeMsg ObjectTree.Msg
 
 
 type alias Flags =
-    ()
+    { object_tree : Maybe ObjectTree.FlatTree
+    }
 
 
 type alias Html =
@@ -59,10 +64,16 @@ type alias ObjKey =
 
 
 init : Flags -> ( Model, Cmd Msg )
-init _ =
+init { object_tree } =
     ( { notice = Notice.None
-      , objList = []
       , hoverInfo = Nothing
+      , objs =
+            case object_tree of
+                Just x ->
+                    ObjectTree.withFlatTree x ObjectTree.empty
+
+                Nothing ->
+                    ObjectTree.empty
       }
     , Cmd.none
     )
@@ -78,11 +89,12 @@ update msg model =
         Notice n ->
             ( { model | notice = n }, Cmd.none )
 
+        ObjectTreeMsg m ->
+            ObjectTree.update m model.objs
+                |> liftUpdate ObjectTreeMsg (\x -> { model | objs = x })
+
         PickSpatialFile ->
             ( model, Ports.pick_spatial_file () )
-
-        RecvObjectList list ->
-            ( { model | objList = list }, Cmd.none )
 
         DeleteObject key ->
             ( model
@@ -92,16 +104,14 @@ update msg model =
                 ]
             )
 
-        ToggleLoaded key ->
-            ( model, Ports.toggle_loaded key )
-
         RecvHoverInfo info ->
             ( { model | hoverInfo = info }, Cmd.none )
 
         RecvProgress p ->
             case Progress.decode p of
                 Progress.Preprocessing key ->
-                    ( { model | objList = SpatialObject.setProgress p key model.objList }, Cmd.none )
+                    ObjectTree.update (ObjectTree.SetProgress { p | msg = "Preprocessing" } key) model.objs
+                        |> liftUpdate ObjectTreeMsg (\x -> { model | objs = x })
 
                 Progress.Unknown ->
                     ( model, Cmd.none )
@@ -116,13 +126,22 @@ liftUpdate toMsg toModel =
 -- SUBSCRIPTIONS
 
 
+port merge_object_flat_tree : (ObjectTree.FlatTree -> msg) -> Sub msg
+
+
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
         [ Notice.get_notice (Notice.recv Notice)
-        , SpatialObject.objectList RecvObjectList
         , Ports.hoverInfo RecvHoverInfo
         , Progress.recv_progress RecvProgress
+
+        -- ObjectTree
+        , Sub.batch
+            [ SpatialObject.objectList ObjectTree.RecvSpatialObjects
+            , merge_object_flat_tree ObjectTree.MergeFlatTree
+            ]
+            |> Sub.map ObjectTreeMsg
         ]
 
 
@@ -135,16 +154,25 @@ view model =
     div
         [ A.style "height" "100%"
         , A.style "display" "flex"
-        , A.style "flex-flow" "column"
+        , css [ backgroundColor Style.theme.bg1 ]
         ]
-        [ node "dirtvz-viewer"
-            [ css [ displayFlex, flex3 (int 1) (int 1) (px 500), minWidth (px 500), minHeight (px 500) ] ]
-            []
-        , div [] [ objectListView model.objList ]
-        , div [] [ button [ onClick PickSpatialFile ] [ text "Add spatial object" ] ]
-        , div [ css [ height (px 120) ] ] 
-        [ Maybe.map hoverInfoView model.hoverInfo |> Maybe.withDefault (div [] []) ]
-        , div [] [ noticeView model.notice ]
+        [ Css.Global.global Style.globalCss
+        , FontAwesome.Styles.css |> fromUnstyled
+        , div [ css [ displayFlex ] ]
+            [ Lazy.lazy ObjectTree.view model.objs
+              |> H.map ObjectTreeMsg
+              |> Style.panel1
+            ]
+        , div [ css [ flex (int 1)]]
+            [ node "dirtvz-viewer"
+                [ css
+                    [ display block
+                    , height (pct 100)
+                    , width (pct 100)
+                    ]
+                ]
+                []
+            ]
         ]
 
 
@@ -172,22 +200,10 @@ objectListView =
                     [ strong [] [ text x.key ]
                     , H.em [] [ text x.status ]
                     , button [ onClick (DeleteObject x.key) ] [ text "delete" ]
-                    , button [ onClick (ToggleLoaded x.key) ] [ text "load/unload" ]
                     ]
-                , maybeProgBar x
                 ]
         )
         >> div []
-
-
-maybeProgBar : SpatialObject -> Html
-maybeProgBar { status, prg } =
-    case ( status, prg ) of
-        ( "preprocessing", Just p ) ->
-            div [] [ Progress.viewBar False p ]
-
-        _ ->
-            div [] []
 
 
 hoverInfoView : HoverInfo -> Html

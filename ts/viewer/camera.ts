@@ -142,7 +142,21 @@ export class Camera {
             olef: this.inner.orthoLeft ?? 0,
             orig: this.inner.orthoRight ?? 1,
         };
-    };
+    }
+
+    redoAspectRatio(canvas: HTMLCanvasElement) {
+        const rect = canvas.getBoundingClientRect();
+        const canvasAspect = rect.width / rect.height;
+
+        const { otop, obot, olef, orig } = this.get_ortho();
+
+        // assume fixing height -- aspect against half the delta height
+        const dx = (otop - obot) * 0.5 * canvasAspect;
+        const cen = olef + (orig - olef) * 0.5;
+
+        this.inner.orthoLeft = cen - dx;
+        this.inner.orthoRight = cen + dx;
+    }
 
     zoomDataExtents(extents: Extents3, canvas: HTMLCanvasElement) {
         // we need to consider a few things:
