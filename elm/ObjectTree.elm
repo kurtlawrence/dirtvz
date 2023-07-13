@@ -5,7 +5,7 @@ import Css exposing (..)
 import Dict exposing (Dict)
 import FontAwesome.Attributes
 import Html.Styled as Html exposing (..)
-import Html.Styled.Attributes as Attr exposing (css, value)
+import Html.Styled.Attributes as Attr exposing (css)
 import Html.Styled.Events exposing (..)
 import List.Extra as Listx
 import Notice
@@ -220,7 +220,7 @@ member : Path -> Tree -> Bool
 member path =
     let
         inner p tree =
-            case Debug.log "path" p of
+            case p of
                 [] ->
                     True
 
@@ -298,7 +298,7 @@ put : Path -> Tree -> Tree -> Tree
 put parent child =
     let
         inner p tree =
-            case Debug.log "path" p of
+            case p of
                 [] ->
                     putChild child tree
 
@@ -846,7 +846,6 @@ update msg model =
 
         MoveToDo to ->
             extractMoveNodes model.objs
-                |> Debug.log "moveNodes"
                 |> List.foldl (move (strToPath to)) model.objs
                 |> (\o ->
                         ( { model
@@ -869,8 +868,7 @@ recvSpatialObjects objs tree =
     let
         -- create obj dict by key
         os =
-            Debug.log "recvSpatialObjects" objs
-                |> List.map (\x -> ( x.key, x ))
+            List.map (\x -> ( x.key, x )) objs
                 |> Dict.fromList
 
         reduce :
@@ -946,12 +944,11 @@ extractMoveNodes tree =
             filter .selected tree |> toFlatTree
 
         pr =
-            commonRoot ft |> Debug.log "commonRoot"
+            commonRoot ft
     in
     List.map .path ft
         |> List.filter (String.startsWith pr)
         |> Listx.filterNot ((==) pr)
-        |> Debug.log "startsWith"
         |> List.map strToPath
 
 
@@ -976,7 +973,6 @@ commonRoot =
     List.map .path
         >> List.filter (String.endsWith "/")
         >> List.map (String.dropRight 1)
-        >> Debug.log "paths"
         >> List.map (String.split "/")
         >> inner
         >> (\s ->
@@ -1001,7 +997,7 @@ port persist_object_tree : FlatTree -> Cmd a
 
 view : ObjectTree -> Html Msg
 view tree =
-    div [ css [ height (pct 100), displayFlex, flexDirection column ] ] 
+    div [ css [ height (pct 100), displayFlex, flexDirection column ] ]
         [ Maybe.map Cmn.popup tree.popup |> Maybe.withDefault (div [] [])
         , filterRow tree
         , actionBar tree.actions
