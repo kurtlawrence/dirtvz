@@ -796,7 +796,9 @@ update msg model =
             )
 
         DeleteFolder path ->
-            ( { model | objs = cut path model.objs |> Tuple.second }, Cmd.none )
+            ( { model | objs = cut path model.objs |> Tuple.second }
+            , Cmn.cmd Persist
+            )
 
         PickObjectFile ->
             ( model, Ports.pick_spatial_file () )
