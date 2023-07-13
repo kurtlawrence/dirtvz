@@ -630,17 +630,20 @@ insertBulkLoadUnloadAction model =
 
         rm a m =
             { m | actions = Dict.remove a.key m.actions }
+
         add a m =
             { m | actions = Dict.insert a.key a m.actions }
-           
     in
     case ( any (always True) selected, any .loaded selected, all .loaded True selected ) of
         ( False, _, _ ) ->
             rm bulkLoadAction model |> rm bulkUnloadAction
+
         ( True, False, _ ) ->
             rm bulkUnloadAction model |> add bulkLoadAction
+
         ( True, _, True ) ->
             add bulkUnloadAction model |> rm bulkLoadAction
+
         _ ->
             add bulkUnloadAction model |> add bulkLoadAction
 
@@ -996,7 +999,7 @@ port persist_object_tree : FlatTree -> Cmd a
 
 view : ObjectTree -> Html Msg
 view tree =
-    div []
+    div [ css [ height (pct 100), displayFlex, flexDirection column ] ] 
         [ Maybe.map Cmn.popup tree.popup |> Maybe.withDefault (div [] [])
         , filterRow tree
         , actionBar tree.actions
@@ -1152,8 +1155,7 @@ treeView tree =
         |> item []
         |> div
             [ css
-                [ overflowY auto
-                ]
+                [ overflowY auto, flex3 (int 1) zero zero ]
             ]
 
 

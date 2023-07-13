@@ -154,7 +154,6 @@ view model =
     div
         [ A.style "height" "100%"
         , A.style "display" "flex"
-        , A.style "box-sizing" "border-box"
         , css [ backgroundColor Style.theme.bg1 ]
         ]
         [ Css.Global.global Style.globalCss
@@ -164,13 +163,12 @@ view model =
               |> H.map ObjectTreeMsg
               |> Style.panel1
             ]
-        , div []
+        , div [ css [ flex (int 1)]]
             [ node "dirtvz-viewer"
                 [ css
-                    [ displayFlex
-                    , flex3 (int 1) (int 1) (px 500)
-                    , minWidth (px 500)
-                    , minHeight (px 500)
+                    [ display block
+                    , height (pct 100)
+                    , width (pct 100)
                     ]
                 ]
                 []

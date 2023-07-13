@@ -105,17 +105,23 @@ class ElmMsg {
 class CanvasRenderer extends HTMLElement {
     canvas: HTMLCanvasElement;
     obs?: ResizeObserver;
+    resize_timeout: any;
 
     constructor() {
         super();
 
         const canvas = document.createElement("canvas");
         this.canvas = canvas;
+        this.canvas.style.display = 'block';
     }
 
     connectedCallback() {
-        this.obs = new ResizeObserver(e => this.sizeCanvas(e[0]));
+        this.obs = new ResizeObserver(e => {
+            clearTimeout(this.resize_timeout);
+            this.resize_timeout = setTimeout(() => this.sizeCanvas(e[0]), 100);
+        });
         this.obs.observe(this);
+        this.obs.observe(document.body);
 
         this.appendChild(this.canvas);
 
@@ -136,17 +142,12 @@ class CanvasRenderer extends HTMLElement {
     }
 
     sizeCanvas(size: ResizeObserverEntry) {
-        const width = `${size.contentBoxSize[0].inlineSize}px`;
-        const height = `${size.contentBoxSize[0].blockSize}px`;
-        console.debug(`canvas resize to w:${width}, h:${height}`);
-        const chgd =
-            this.canvas.style.width !== width || this.canvas.style.height !== height;
-
-        this.canvas.style.width = width;
-        this.canvas.style.height = height;
-
-        if (chgd)
-            VWR?.canvas_size_changed();
+        this.removeChild(this.canvas);
+        const rect = this.getBoundingClientRect();
+        this.canvas.height = rect.height;
+        this.canvas.width = rect.width;
+        this.appendChild(this.canvas);
+        VWR?.canvas_size_changed();
     }
 }
 

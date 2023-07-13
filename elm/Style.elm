@@ -85,6 +85,7 @@ globalCss =
             ]
         ]
 
+
     -- title attribute
     , Css.Global.selector "*[title]:hover::after"
         [ property "content" "attr(title)"
@@ -99,6 +100,9 @@ globalCss =
         , transform (translateY (pct -50))
         , zIndex (int 1)
         ]
+
+    , Css.Global.everything
+        [ property "scrollbar-width" "thin" ]
 
     -- display-on-parent-hover class
     , Css.Global.class class.displayOnParentHover [ visibility hidden ]
