@@ -133,9 +133,9 @@ export class Viewer {
 
         console.time(`loading object ${key}`);
         await this.layers.add_surface(key);
-        this._dirty = true;
         console.timeEnd(`loading object ${key}`);
         await this.update_in_view_tiles();
+        this.mark_dirty();
     }
 
 	async unload_object(key: string) {
