@@ -114,9 +114,9 @@ export class Viewer {
 
 	canvas_size_changed() {
 		console.debug('canvas size changed');
+        this.camera.redoAspectRatio(this.canvas);
 		this.scene.render();
 	}
-
 
     async toggle_object(key: string) {
         if (this.layers.is_loaded(key)) {
