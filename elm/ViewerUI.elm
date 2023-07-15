@@ -8,6 +8,7 @@ import Html.Styled as H exposing (..)
 import Html.Styled.Attributes as A exposing (css)
 import Html.Styled.Events exposing (..)
 import Html.Styled.Lazy as Lazy
+import Nav
 import Notice
 import ObjectTree exposing (ObjectTree)
 import Ports exposing (HoverInfo)
@@ -36,6 +37,7 @@ main =
 
 type alias Model =
     { notice : Notice.Notice
+    , nav : Nav.State
     , objs : ObjectTree
     , hoverInfo : Maybe HoverInfo
     }
@@ -48,6 +50,7 @@ type Msg
     | RecvHoverInfo (Maybe HoverInfo)
     | RecvProgress Progress
     | ObjectTreeMsg ObjectTree.Msg
+    | SetNavState Nav.State
 
 
 type alias Flags =
@@ -66,6 +69,7 @@ type alias ObjKey =
 init : Flags -> ( Model, Cmd Msg )
 init { object_tree } =
     ( { notice = Notice.None
+      , nav = Nav.Objects
       , hoverInfo = Nothing
       , objs =
             case object_tree of
@@ -116,6 +120,9 @@ update msg model =
                 Progress.Unknown ->
                     ( model, Cmd.none )
 
+        SetNavState s ->
+            ( { model | nav = s }, Cmd.none )
+
 
 liftUpdate : (b -> Msg) -> (a -> Model) -> ( a, Cmd b ) -> ( Model, Cmd Msg )
 liftUpdate toMsg toModel =
@@ -159,11 +166,10 @@ view model =
         [ Css.Global.global Style.globalCss
         , FontAwesome.Styles.css |> fromUnstyled
         , div [ css [ displayFlex ] ]
-            [ Lazy.lazy ObjectTree.view model.objs
-              |> H.map ObjectTreeMsg
-              |> Style.panel1
+            [ Lazy.lazy (Nav.view SetNavState) model.nav
+            , panel1 model
             ]
-        , div [ css [ flex (int 1)]]
+        , div [ css [ flex (int 1) ] ]
             [ node "dirtvz-viewer"
                 [ css
                     [ display block
@@ -174,6 +180,18 @@ view model =
                 []
             ]
         ]
+
+
+panel1 : Model -> Html
+panel1 model =
+    case model.nav of
+        Nav.None ->
+            div [] []
+
+        Nav.Objects ->
+            Lazy.lazy ObjectTree.view model.objs
+                |> H.map ObjectTreeMsg
+                |> Style.panel1
 
 
 noticeView notice =
