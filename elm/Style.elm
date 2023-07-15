@@ -85,7 +85,6 @@ globalCss =
             ]
         ]
 
-
     -- title attribute
     , Css.Global.selector "*[title]:hover::after"
         [ property "content" "attr(title)"
@@ -100,7 +99,6 @@ globalCss =
         , transform (translateY (pct -50))
         , zIndex (int 1)
         ]
-
     , Css.Global.everything
         [ property "scrollbar-width" "thin" ]
 
@@ -117,19 +115,25 @@ globalCss =
     ]
 
 
+panelBorders : List Style
+panelBorders =
+    [ marginRight (px 5)
+    , padding (px 5)
+    , borderRadius4 zero (px 5) (px 5) zero
+    , boxShadow5 (px 3) zero (px 5) (px -3) theme.ac1
+    ]
+
+
 panel1 : Html msg -> Html msg
 panel1 child =
     div
         [ Attr.id "panel-1"
-        , css
+        , css <|
             [ minWidth (px 200)
             , resize horizontal
             , overflow hidden
-            , margin (px 5)
-            , padding (px 5)
-            , borderRadius (px 5)
-            , boxShadow5 (px 0) (px 0) (px 5) (px 1) theme.ac1
             ]
+                ++ panelBorders
         ]
         [ child ]
 
@@ -239,14 +243,12 @@ iconFolderMove attrs =
         |> fromUnstyled
 
 
-
 iconLoadedFilterToggle : List (Svg.Attribute Never) -> Html msg
 iconLoadedFilterToggle attrs =
     FontAwesome.Solid.eye
         |> FontAwesome.styled (defIconAttrs ++ attrs)
         |> FontAwesome.view
         |> fromUnstyled
-
 
 
 iconSolidEye : List (Svg.Attribute Never) -> Html msg

@@ -8,6 +8,8 @@ export { viewerUi };
 
 let VWR: Viewer | undefined;
 let APP: any;
+let WPR : CanvasRenderer | undefined;
+
 const DBNAME: string = 'test-db';
 
 async function viewerUi(element: HTMLElement | string) {
@@ -80,6 +82,9 @@ async function viewerUi(element: HTMLElement | string) {
 
     APP.ports.persist_object_tree.subscribe((x: FlatTreeItem[]) =>
         PersistObjectTree.store(DBNAME, x));
+
+	APP.ports.hint_canvas_resize.subscribe(() => 
+		setTimeout(() => WPR?.sizeCanvas(), 100));
 }
 
 class ElmMsg {
@@ -116,9 +121,11 @@ class CanvasRenderer extends HTMLElement {
     }
 
     connectedCallback() {
+		WPR = this;
+
         this.obs = new ResizeObserver(e => {
             clearTimeout(this.resize_timeout);
-            this.resize_timeout = setTimeout(() => this.sizeCanvas(e[0]), 100);
+            this.resize_timeout = setTimeout(() => this.sizeCanvas(), 100);
         });
         this.obs.observe(this);
         this.obs.observe(document.body);
@@ -135,13 +142,14 @@ class CanvasRenderer extends HTMLElement {
     }
 
     disconnectedCallback() {
+		WPR = undefined;
         VWR = undefined;
         this.obs?.disconnect();
         this.obs = undefined;
         this.removeChild(this.canvas);
     }
 
-    sizeCanvas(size: ResizeObserverEntry) {
+    sizeCanvas() {
         this.removeChild(this.canvas);
         const rect = this.getBoundingClientRect();
         this.canvas.height = rect.height;
