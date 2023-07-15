@@ -121,7 +121,7 @@ update msg model =
                     ( model, Cmd.none )
 
         SetNavState s ->
-            ( { model | nav = s }, Cmd.none )
+            ( { model | nav = s }, hint_canvas_resize () )
 
 
 liftUpdate : (b -> Msg) -> (a -> Model) -> ( a, Cmd b ) -> ( Model, Cmd Msg )
@@ -134,6 +134,8 @@ liftUpdate toMsg toModel =
 
 
 port merge_object_flat_tree : (ObjectTree.FlatTree -> msg) -> Sub msg
+
+port hint_canvas_resize : () -> Cmd msg
 
 
 subscriptions : Model -> Sub Msg
