@@ -40,6 +40,7 @@ type Msg
     | BgSetColour Int String
     | BgRemoveColour Int
     | RenderSetMsaa Int
+    | RenderToggleWorldAxes
 
 
 with : Settings -> Model
@@ -86,6 +87,11 @@ update msg model =
         RenderSetMsaa i ->
             uRender model
                 (\r -> { r | msaa = i })
+                |> updateViewer { noChg | render = True }
+
+        RenderToggleWorldAxes ->
+            uRender model
+                (\r -> { r | worldaxes = not r.worldaxes })
                 |> updateViewer { noChg | render = True }
 
 
@@ -200,11 +206,12 @@ viewBg { ty, colours } =
 
 type alias RenderOptions =
     { msaa : Int
+    , worldaxes : Bool
     }
 
 
 viewRenderOpts : RenderOptions -> Html Msg
-viewRenderOpts { msaa } =
+viewRenderOpts { msaa, worldaxes } =
     let
         v x =
             "MSAA "
@@ -220,4 +227,13 @@ viewRenderOpts { msaa } =
             [ text "Anti-aliasing"
             , Cmn.dropdown (v msaa) (vs [ 1, 2, 4, 8 ])
             ]
+        , button
+            [ css
+                [ opacity (num 1)
+                , marginTop (px 5)
+                , padding (px 3)
+                ]
+            , onClick RenderToggleWorldAxes
+            ]
+            [ Style.checkbox [ Attr.checked worldaxes ], text "Show World Axes" ]
         ]

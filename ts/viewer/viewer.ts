@@ -184,8 +184,14 @@ export class Viewer {
             return;
 
         console.debug(pipeline);
+
         const pl = this._rpipeline;
         pl.samples = pipeline.msaa;
+
+        if (pipeline.worldaxes && !this.camera.world_axes)
+            this.camera.toggle_world_axes(this.canvas);
+        else if (!pipeline.worldaxes && this.camera.world_axes)
+            this.camera.toggle_world_axes(this.canvas);
 
         this.mark_dirty();
     }
@@ -331,5 +337,6 @@ export type Background = {
 };
 
 export type RenderingOptions = {
-    msaa: number
+    msaa: number,
+    worldaxes: boolean
 }

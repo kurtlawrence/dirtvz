@@ -248,7 +248,7 @@ class PersistObjectTree {
 
 class Settings {
     bg: Background = { ty: 'linear', colours: ['oldlace', 'dimgrey'] };
-    render: RenderingOptions = { msaa: 4 };
+    render: RenderingOptions = { msaa: 4, worldaxes: false };
 
     static store(settings: Settings) {
         if (settings)
@@ -260,7 +260,9 @@ class Settings {
         if (x) {
             const y = new Settings();
             try {
-                Object.assign(y, JSON.parse(x));
+                const z: Settings = JSON.parse(x);
+                Object.assign(y.bg, z.bg);
+                Object.assign(y.render, z.render);
                 return y;
             } catch {
                 return y;
