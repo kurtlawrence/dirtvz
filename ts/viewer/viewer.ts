@@ -112,15 +112,15 @@ export class Viewer {
         this.camera.zoomDataExtents(extents, this.canvas);
     }
 
-	canvas_size_changed() {
-		console.debug('canvas size changed');
+    canvas_size_changed() {
+        console.debug('canvas size changed');
         this.camera.redoAspectRatio(this.canvas);
-		this.scene.render();
-	}
+        this.scene.render();
+    }
 
     async toggle_object(key: string) {
         if (this.layers.is_loaded(key)) {
-			this.unload_object(key);
+            this.unload_object(key);
         } else {
             if (this.init_tiler())
                 this.load_object(key);
@@ -138,13 +138,13 @@ export class Viewer {
         this.mark_dirty();
     }
 
-	async unload_object(key: string) {
+    async unload_object(key: string) {
         if (!this.layers.is_loaded(key))
             return;
 
-		this.layers.unload(key);
-		this.mark_dirty();
-	}
+        this.layers.unload(key);
+        this.mark_dirty();
+    }
 
     onhover(cb: HoverCb) {
         this._hover.action = cb;
@@ -152,8 +152,16 @@ export class Viewer {
 
     set_background(bg: Background) {
         switch (bg.ty) {
+            case 'single':
+                this.canvas.style.background = bg.colours[0];
+                break;
+
             case 'linear':
-                this.canvas.style.background = "linear-gradient(" + bg.colours.join(',') + ")";
+                this.canvas.style.background = `linear-gradient(${bg.colours.join(',')})`;
+                break;
+
+            case 'radial':
+                this.canvas.style.background = `radial-gradient(${bg.colours.join(',')})`;
                 break;
 
             default:

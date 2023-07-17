@@ -2,6 +2,7 @@ module Style exposing (..)
 
 import Css exposing (..)
 import Css.Global
+import Css.Transitions exposing (transition)
 import FontAwesome
 import FontAwesome.Attributes
 import FontAwesome.Regular
@@ -9,7 +10,6 @@ import FontAwesome.Solid
 import Html.Styled as Html exposing (..)
 import Html.Styled.Attributes as Attr exposing (css)
 import Html.Styled.Events exposing (..)
-import Svg
 import Svg.Attributes
 
 
@@ -32,6 +32,8 @@ theme =
 
 class =
     { displayOnParentHover = "display-on-parent-hover"
+    , dropdown = "dropdown"
+    , dropdownItems = "items"
     }
 
 
@@ -112,6 +114,48 @@ globalCss =
                 ]
             ]
         ]
+
+    -- dropdown
+    , Css.Global.class class.dropdown
+        [ minWidth (px 80)
+        , position relative
+        , Css.Global.descendants
+            [ Css.Global.class class.dropdownItems
+                [ height zero
+                , position absolute
+                , backgroundColor theme.bg1
+                , overflow hidden
+                , whiteSpace noWrap
+                , zIndex (int 10)
+                , opacity zero
+                , maxHeight (px 400)
+                , overflowY auto
+                , boxSizing borderBox
+                , width (pct 100)
+                , transition [ Css.Transitions.opacity 100 ]
+                ]
+            ]
+        , focus
+            [ Css.Global.descendants
+                [ Css.Global.class class.dropdownItems
+                    [ height unset
+                    , opacity (num 1)
+                    , border3 (px 1) solid theme.ac1
+                    , borderTop zero
+                    ]
+                ]
+            ]
+        , pseudoClass "focus-within"
+            [ Css.Global.descendants
+                [ Css.Global.class class.dropdownItems
+                    [ height unset
+                    , opacity (num 1)
+                    , border3 (px 1) solid theme.ac1
+                    , borderTop zero
+                    ]
+                ]
+            ]
+        ]
     ]
 
 
@@ -157,111 +201,105 @@ checkbox attrs =
         []
 
 
+type IconSize
+    = FaDefault
+    | FaXs
+    | FaSm
+    | FaLg
+
+
 defIconAttrs =
-    [ FontAwesome.Attributes.sm
-    , Svg.Attributes.style "margin: auto"
-    ]
+    [ Svg.Attributes.style "margin: auto" ]
 
 
-iconPen : List (Svg.Attribute Never) -> Html msg
-iconPen attrs =
-    FontAwesome.Solid.pen
-        |> FontAwesome.styled (defIconAttrs ++ attrs)
+ico : FontAwesome.Icon FontAwesome.WithoutId -> IconSize -> Html msg
+ico icon size =
+    let
+        sz =
+            case size of
+                FaDefault ->
+                    FontAwesome.Attributes.sm
+
+                FaXs ->
+                    FontAwesome.Attributes.xs
+
+                FaSm ->
+                    FontAwesome.Attributes.sm
+
+                FaLg ->
+                    FontAwesome.Attributes.lg
+    in
+    icon
+        |> FontAwesome.styled [ sz, Svg.Attributes.style "margin: auto" ]
         |> FontAwesome.view
         |> fromUnstyled
 
 
-iconTrash : List (Svg.Attribute Never) -> Html msg
-iconTrash attrs =
-    FontAwesome.Solid.trash
-        |> FontAwesome.styled (defIconAttrs ++ attrs)
-        |> FontAwesome.view
-        |> fromUnstyled
+iconPen : IconSize -> Html msg
+iconPen =
+    ico FontAwesome.Solid.pen
 
 
-iconFileImport : List (Svg.Attribute Never) -> Html msg
-iconFileImport attrs =
-    FontAwesome.Solid.fileImport
-        |> FontAwesome.styled (defIconAttrs ++ attrs)
-        |> FontAwesome.view
-        |> fromUnstyled
+iconTrash : IconSize -> Html msg
+iconTrash =
+    ico FontAwesome.Solid.trash
 
 
-iconFolderPlus : List (Svg.Attribute Never) -> Html msg
-iconFolderPlus attrs =
-    FontAwesome.Solid.folderPlus
-        |> FontAwesome.styled (defIconAttrs ++ attrs)
-        |> FontAwesome.view
-        |> fromUnstyled
+iconFileImport : IconSize -> Html msg
+iconFileImport =
+    ico FontAwesome.Solid.fileImport
 
 
-iconObjectRoot : List (Svg.Attribute Never) -> Html msg
-iconObjectRoot attrs =
-    FontAwesome.Regular.objectUngroup
-        |> FontAwesome.styled (defIconAttrs ++ attrs)
-        |> FontAwesome.view
-        |> fromUnstyled
+iconFolderPlus : IconSize -> Html msg
+iconFolderPlus =
+    ico FontAwesome.Solid.folderPlus
 
 
-iconQuestionMark : List (Svg.Attribute Never) -> Html msg
-iconQuestionMark attrs =
-    FontAwesome.Solid.question
-        |> FontAwesome.styled (defIconAttrs ++ attrs)
-        |> FontAwesome.view
-        |> fromUnstyled
+iconObjectRoot : IconSize -> Html msg
+iconObjectRoot =
+    ico FontAwesome.Regular.objectUngroup
 
 
-iconSurface : List (Svg.Attribute Never) -> Html msg
-iconSurface attrs =
-    FontAwesome.Solid.mountain
-        |> FontAwesome.styled (defIconAttrs ++ attrs)
-        |> FontAwesome.view
-        |> fromUnstyled
+iconQuestionMark : IconSize -> Html msg
+iconQuestionMark =
+    ico FontAwesome.Solid.question
 
 
-iconFolderClosed : List (Svg.Attribute Never) -> Html msg
-iconFolderClosed attrs =
-    FontAwesome.Solid.folder
-        |> FontAwesome.styled (defIconAttrs ++ attrs)
-        |> FontAwesome.view
-        |> fromUnstyled
+iconSurface : IconSize -> Html msg
+iconSurface =
+    ico FontAwesome.Solid.mountain
 
 
-iconFolderOpen : List (Svg.Attribute Never) -> Html msg
-iconFolderOpen attrs =
-    FontAwesome.Solid.folderOpen
-        |> FontAwesome.styled (defIconAttrs ++ attrs)
-        |> FontAwesome.view
-        |> fromUnstyled
+iconFolderClosed : IconSize -> Html msg
+iconFolderClosed =
+    ico FontAwesome.Solid.folder
 
 
-iconFolderMove : List (Svg.Attribute Never) -> Html msg
-iconFolderMove attrs =
-    FontAwesome.Solid.upDownLeftRight
-        |> FontAwesome.styled (defIconAttrs ++ attrs)
-        |> FontAwesome.view
-        |> fromUnstyled
+iconFolderOpen : IconSize -> Html msg
+iconFolderOpen =
+    ico FontAwesome.Solid.folderOpen
 
 
-iconLoadedFilterToggle : List (Svg.Attribute Never) -> Html msg
-iconLoadedFilterToggle attrs =
-    FontAwesome.Solid.eye
-        |> FontAwesome.styled (defIconAttrs ++ attrs)
-        |> FontAwesome.view
-        |> fromUnstyled
+iconFolderMove : IconSize -> Html msg
+iconFolderMove =
+    ico FontAwesome.Solid.upDownLeftRight
 
 
-iconSolidEye : List (Svg.Attribute Never) -> Html msg
-iconSolidEye attrs =
-    FontAwesome.Solid.eye
-        |> FontAwesome.styled (defIconAttrs ++ attrs)
-        |> FontAwesome.view
-        |> fromUnstyled
+iconLoadedFilterToggle : IconSize -> Html msg
+iconLoadedFilterToggle =
+    ico FontAwesome.Solid.eye
 
 
-iconEmptyEye : List (Svg.Attribute Never) -> Html msg
-iconEmptyEye attrs =
-    FontAwesome.Regular.eye
-        |> FontAwesome.styled (defIconAttrs ++ attrs)
-        |> FontAwesome.view
-        |> fromUnstyled
+iconSolidEye : IconSize -> Html msg
+iconSolidEye =
+    ico FontAwesome.Solid.eye
+
+
+iconEmptyEye : IconSize -> Html msg
+iconEmptyEye =
+    ico FontAwesome.Regular.eye
+
+
+iconGear : IconSize -> Html msg
+iconGear =
+    ico FontAwesome.Solid.gear

@@ -11,6 +11,7 @@ import Style
 type State
     = None
     | Objects
+    | Settings
 
 
 
@@ -20,7 +21,13 @@ type State
 view : (State -> a) -> State -> Html a
 view newState state =
     div
-        [ css Style.panelBorders ]
+        [ css <|
+            [ displayFlex
+            , flexDirection column
+            , alignItems center
+            ]
+                ++ Style.panelBorders
+        ]
         (List.map (btnView newState state) btns)
 
 
@@ -34,8 +41,12 @@ type alias Btn a =
 btns : List (Btn a)
 btns =
     [ { title = "Objects"
-      , icon = Style.iconObjectRoot [ FontAwesome.Attributes.lg ]
+      , icon = Style.iconObjectRoot Style.FaLg
       , navTo = Objects
+      }
+    , { title = "Settings"
+      , icon = Style.iconGear Style.FaLg
+      , navTo = Settings
       }
     ]
 
@@ -57,7 +68,10 @@ btnView click on b =
                 }
     in
     button
-        [ css [ opacity (num op) ]
+        [ css
+            [ opacity (num op)
+            , marginBottom (px 10)
+            ]
         , Attr.title title
         , onClick (click navTo)
         ]

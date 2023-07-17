@@ -63,7 +63,7 @@ type alias Action =
 addFileAction : Action
 addFileAction =
     { msg = "Load local file"
-    , icon = Style.iconFileImport [ FontAwesome.Attributes.lg ]
+    , icon = Style.iconFileImport Style.FaLg
     , key = 1
     , click = PickObjectFile
     }
@@ -72,7 +72,7 @@ addFileAction =
 mkdirAction : Action
 mkdirAction =
     { msg = "New folder"
-    , icon = Style.iconFolderPlus [ FontAwesome.Attributes.lg ]
+    , icon = Style.iconFolderPlus Style.FaLg
     , key = 2
     , click = MakeDirectory
     }
@@ -81,7 +81,7 @@ mkdirAction =
 moveToAction : Action
 moveToAction =
     { msg = "Move to"
-    , icon = Style.iconFolderMove [ FontAwesome.Attributes.lg ]
+    , icon = Style.iconFolderMove Style.FaLg
     , key = 20
     , click = MoveSelected
     }
@@ -90,7 +90,7 @@ moveToAction =
 bulkLoadAction : Action
 bulkLoadAction =
     { msg = "Load selected"
-    , icon = Style.iconSolidEye [ FontAwesome.Attributes.lg ]
+    , icon = Style.iconSolidEye Style.FaLg
     , key = 50
     , click = LoadSelected
     }
@@ -99,7 +99,7 @@ bulkLoadAction =
 bulkUnloadAction : Action
 bulkUnloadAction =
     { msg = "Unload selected"
-    , icon = Style.iconEmptyEye [ FontAwesome.Attributes.lg ]
+    , icon = Style.iconEmptyEye Style.FaLg
     , key = 51
     , click = UnloadSelected
     }
@@ -108,7 +108,7 @@ bulkUnloadAction =
 deleteAction : Action
 deleteAction =
     { msg = "Delete objects"
-    , icon = Style.iconTrash [ FontAwesome.Attributes.lg ]
+    , icon = Style.iconTrash Style.FaLg
     , key = 100
     , click = DeleteSelected
     }
@@ -1017,7 +1017,7 @@ filterRow model =
             [ Attr.title "Loaded/unloaded"
             , onClick ToggleLoadedFilter
             ]
-            [ Style.iconLoadedFilterToggle [] ]
+            [ Style.iconLoadedFilterToggle Style.FaDefault ]
         ]
 
 
@@ -1081,7 +1081,7 @@ treeView tree =
                                         [ Attr.title "Collapse all"
                                         , Cmn.onClickStopProp <| ToggleCollapsed []
                                         ]
-                                        [ Style.iconObjectRoot [] ]
+                                        [ Style.iconObjectRoot Style.FaDefault ]
                             }
 
                          else
@@ -1098,14 +1098,14 @@ treeView tree =
                                             [ Attr.title "Open"
                                             , Cmn.onClickStopProp <| ToggleCollapsed p
                                             ]
-                                            [ Style.iconFolderClosed [] ]
+                                            [ Style.iconFolderClosed Style.FaDefault ]
 
                                     else
                                         button
                                             [ Attr.title "Collapse"
                                             , Cmn.onClickStopProp <| ToggleCollapsed p
                                             ]
-                                            [ Style.iconFolderOpen [] ]
+                                            [ Style.iconFolderOpen Style.FaDefault ]
                             }
                         )
                         :: (if x.collapsed && not isRoot then
@@ -1133,7 +1133,7 @@ treeView tree =
                                             x.status
                                                 == SpatialObject.preprocessing
                                         )
-                            , icon = Style.iconSurface []
+                            , icon = Style.iconSurface Style.FaDefault
                         }
                     ]
     in
@@ -1199,7 +1199,7 @@ itemview =
     , selected = False
     , loaded = False
     , progress = Nothing
-    , icon = Style.iconQuestionMark []
+    , icon = Style.iconQuestionMark Style.FaDefault
     , collapsed = False
     }
 
@@ -1237,7 +1237,7 @@ itemView iv =
                     , Cmn.onClickStopProp (DeleteFolder iv.path)
                     , rowBtnStyle
                     ]
-                    [ Style.iconTrash [] ]
+                    [ Style.iconTrash Style.FaDefault ]
                 )
                 []
                 |> madd iv.renameable
@@ -1247,7 +1247,7 @@ itemView iv =
                         , Cmn.onClickStopProp (RenameStart iv.path iv.name)
                         , rowBtnStyle
                         ]
-                        [ Style.iconPen [] ]
+                        [ Style.iconPen Style.FaDefault ]
                     )
                 |> (::)
                     ((if iv.loaded then
