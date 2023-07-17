@@ -1,4 +1,4 @@
-import { Background, Viewer } from "./viewer/viewer";
+import { Background, RenderingOptions, Viewer } from "./viewer/viewer";
 import { spawn, spawn_pool } from './worker-spawn';
 import { Store } from './store';
 import { FlatTreeItem, Status } from "./spatial-obj";
@@ -47,7 +47,8 @@ async function viewerUi(element: HTMLElement | string) {
     ON_VWR_CONNECT = () => {
         const settings = Settings.get() ?? new Settings();
         Settings.apply(settings, {
-            bg: true
+            bg: true,
+            render: true
         });
     };
 
@@ -247,6 +248,7 @@ class PersistObjectTree {
 
 class Settings {
     bg: Background = { ty: 'linear', colours: ['oldlace', 'dimgrey'] };
+    render: RenderingOptions = { msaa: 4 };
 
     static store(settings: Settings) {
         if (settings)
@@ -255,10 +257,17 @@ class Settings {
 
     static get(): Settings | null {
         const x = localStorage.getItem('settings');
-        if (x)
-            return JSON.parse(x);
-        else
+        if (x) {
+            const y = new Settings();
+            try {
+                Object.assign(y, JSON.parse(x));
+                return y;
+            } catch {
+                return y;
+            }
+        } else {
             return null;
+        }
     }
 
     static apply(settings: Settings, changes: Changes) {
@@ -269,10 +278,15 @@ class Settings {
         if (changes.bg) {
             VWR.set_background(settings.bg);
         }
+
+        if (changes.render) {
+            VWR.set_rendering_pipeline(settings.render);
+        }
     }
 }
 
 type Changes = {
-    bg: boolean
+    bg: boolean,
+    render: boolean
 };
 

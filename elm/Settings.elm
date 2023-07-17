@@ -1,6 +1,6 @@
 port module Settings exposing (..)
 
-import Cmn 
+import Cmn
 import Css exposing (..)
 import Html.Styled as Html exposing (..)
 import Html.Styled.Attributes as Attr exposing (css)
@@ -12,17 +12,20 @@ import Style
 
 type alias Settings =
     { bg : Background
+    , render : RenderOptions
     }
 
 
 type alias Changes =
     { bg : Bool
+    , render : Bool
     }
 
 
 noChg : Changes
 noChg =
     { bg = False
+    , render = False
     }
 
 
@@ -36,6 +39,7 @@ type Msg
     | BgAddColour
     | BgSetColour Int String
     | BgRemoveColour Int
+    | RenderSetMsaa Int
 
 
 with : Settings -> Model
@@ -79,6 +83,11 @@ update msg model =
                     )
                     |> updateViewer { noChg | bg = True }
 
+        RenderSetMsaa i ->
+            uRender model
+                (\r -> { r | msaa = i })
+                |> updateViewer { noChg | render = True }
+
 
 us : Model -> (Settings -> Settings) -> Model
 us m sf =
@@ -88,6 +97,11 @@ us m sf =
 uBg : Model -> (Background -> Background) -> Model
 uBg m f =
     us m (\s -> { s | bg = f s.bg })
+
+
+uRender : Model -> (RenderOptions -> RenderOptions) -> Model
+uRender m f =
+    us m (\s -> { s | render = f s.render })
 
 
 updateViewer : Changes -> Model -> ( Model, Cmd a )
@@ -112,9 +126,13 @@ view { settings } =
         [ Html.em [] [ text "Background" ]
         , hr
         , viewBg settings.bg
+        , Html.em [] [ text "Rendering" ]
+        , hr
+        , viewRenderOpts settings.render
         ]
 
 
+hr : Html msg
 hr =
     Html.hr
         [ css
@@ -171,5 +189,35 @@ viewBg { ty, colours } =
                 [ displayFlex
                 , flexDirection column
                 , alignItems end
+                , fontSize (Css.em 0.9)
                 ]
             ]
+
+
+
+-- RENDER OPTIONS
+
+
+type alias RenderOptions =
+    { msaa : Int
+    }
+
+
+viewRenderOpts : RenderOptions -> Html Msg
+viewRenderOpts { msaa } =
+    let
+        v x =
+            "MSAA "
+                ++ String.fromInt x
+                ++ "x"
+                |> text
+
+        vs =
+            List.map (\n -> div [ onClick (RenderSetMsaa n) ] [ v n ])
+    in
+    div [ css [ fontSize (Css.em 0.9) ] ]
+        [ div [ css [ displayFlex, justifyContent spaceBetween ] ]
+            [ text "Anti-aliasing"
+            , Cmn.dropdown (v msaa) (vs [ 1, 2, 4, 8 ])
+            ]
+        ]

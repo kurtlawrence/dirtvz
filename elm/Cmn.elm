@@ -46,6 +46,7 @@ textInput value msg attrs =
         ([ Attr.value value
          , onInput msg
          , Attr.type_ "text"
+         , onClickStopProp (msg value)
          ]
             ++ attrs
         )

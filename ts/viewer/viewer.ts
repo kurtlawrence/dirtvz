@@ -20,6 +20,7 @@ export class Viewer {
     _viewts?: number;
     _dirty: boolean = true;
     extents: Extents3 = Extents3.zero_to_one();
+    _rpipeline: BABYLON.DefaultRenderingPipeline;
 
     private static TILE_LOD_TIMEOUT: number = 200; // wait before loading
 
@@ -32,6 +33,14 @@ export class Viewer {
         this.store = store;
         this.layers = new Layers(store, this.scene);
         this._hover = new Hover(this.scene);
+
+        this._rpipeline = new BABYLON.DefaultRenderingPipeline(
+            "renderingPipeline", // The name of the pipeline
+            true, // Do you want the pipeline to use HDR texture?
+            this.scene, // The scene instance
+            [this.camera.inner] // The list of cameras to be attached to
+        );
+        this._rpipeline.fxaaEnabled = false;
     }
 
     /**
@@ -168,6 +177,17 @@ export class Viewer {
                 break;
         }
 
+    }
+
+    set_rendering_pipeline(pipeline: RenderingOptions) {
+        if (!pipeline)
+            return;
+
+        console.debug(pipeline);
+        const pl = this._rpipeline;
+        pl.samples = pipeline.msaa;
+
+        this.mark_dirty();
     }
 
     private view_chgd() {
@@ -309,3 +329,7 @@ export type Background = {
     ty: 'single' | 'linear' | 'radial',
     colours: string[]
 };
+
+export type RenderingOptions = {
+    msaa: number
+}
