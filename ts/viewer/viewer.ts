@@ -41,6 +41,8 @@ export class Viewer {
             [this.camera.inner] // The list of cameras to be attached to
         );
         this._rpipeline.fxaaEnabled = false;
+        this._rpipeline.sharpenEnabled = false;
+        this._rpipeline.bloomEnabled = false;
     }
 
     /**
