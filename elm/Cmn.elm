@@ -53,6 +53,21 @@ textInput value msg attrs =
         []
 
 
+sliderInput : List (Attribute a) -> ( Float, Float ) -> Float -> (Float -> a) -> Html a
+sliderInput a ( lo, hi ) v f =
+    Html.input
+        ([ Attr.type_ "range"
+         , Attr.step "any"
+         , Attr.min <| String.fromFloat lo
+         , Attr.max <| String.fromFloat hi
+         , Attr.value <| String.fromFloat v
+         , onInput (String.toFloat >> Maybe.withDefault v >> f)
+         ]
+            ++ a
+        )
+        []
+
+
 dropdown : Html a -> List (Html a) -> Html a
 dropdown display items =
     div
@@ -105,7 +120,7 @@ namedColourDropdown current onChoose =
                             , alignItems center
                             , fontSize (Css.em 0.8)
                             , width (px 170)
-                             ]
+                            ]
                        ]
                 )
                 [ div

@@ -65,6 +65,13 @@ globalCss =
             ]
         ]
 
+    -- slide input
+    , Css.Global.each
+        [ Css.Global.selector "input[type=range]"
+        , Css.Global.selector "input[type=checkbox]"
+        ]
+        [ property "accent-color" "rgb(223,215,191)"]
+
     -- code
     , Css.Global.code
         [ backgroundColor theme.ac2

@@ -196,6 +196,11 @@ export class Viewer {
         this.mark_dirty();
     }
 
+    set_lighting(lighting: LightingOptions) {
+        this.light.redirect(lighting.bearing, lighting.slope);
+        this.mark_dirty();
+    }
+
     private view_chgd() {
         this._dirty = true;
         this._viewts = Date.now() + Viewer.TILE_LOD_TIMEOUT;
@@ -339,4 +344,9 @@ export type Background = {
 export type RenderingOptions = {
     msaa: number,
     worldaxes: boolean
+}
+
+export type LightingOptions = {
+    bearing: number,
+    slope: number
 }

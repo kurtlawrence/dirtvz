@@ -13,12 +13,14 @@ import Style
 type alias Settings =
     { bg : Background
     , render : RenderOptions
+    , light: LightingOptions
     }
 
 
 type alias Changes =
     { bg : Bool
     , render : Bool
+    , light: Bool
     }
 
 
@@ -26,6 +28,7 @@ noChg : Changes
 noChg =
     { bg = False
     , render = False
+    , light = False
     }
 
 
@@ -41,6 +44,8 @@ type Msg
     | BgRemoveColour Int
     | RenderSetMsaa Int
     | RenderToggleWorldAxes
+    | LightSetBearing Float
+    | LightSetSlope Float
 
 
 with : Settings -> Model
@@ -94,6 +99,16 @@ update msg model =
                 (\r -> { r | worldaxes = not r.worldaxes })
                 |> updateViewer { noChg | render = True }
 
+        LightSetBearing x ->
+            uLight model
+                (\l -> { l | bearing = x })
+                |> updateViewer { noChg | light = True }
+
+        LightSetSlope x ->
+            uLight model
+                (\l -> { l | slope = x })
+                |> updateViewer { noChg | light = True }
+
 
 us : Model -> (Settings -> Settings) -> Model
 us m sf =
@@ -108,6 +123,10 @@ uBg m f =
 uRender : Model -> (RenderOptions -> RenderOptions) -> Model
 uRender m f =
     us m (\s -> { s | render = f s.render })
+
+uLight : Model -> (LightingOptions -> LightingOptions) -> Model
+uLight m f =
+    us m (\s -> { s | light = f s.light })
 
 
 updateViewer : Changes -> Model -> ( Model, Cmd a )
@@ -128,13 +147,19 @@ port settings_changed : { settings : Settings, changes : Changes } -> Cmd a
 
 view : Model -> Html Msg
 view { settings } =
+    let
+       hd =
+          css [ display block, textDecoration underline, marginBottom (Css.em 0.7) ]
+    in
     div []
-        [ Html.em [] [ text "Background" ]
-        , hr
+        [ Html.em [hd] [ text "Background" ]
         , viewBg settings.bg
-        , Html.em [] [ text "Rendering" ]
         , hr
+        , Html.em [hd] [ text "Rendering" ]
         , viewRenderOpts settings.render
+        , hr
+        , Html.em [hd] [ text "Lighting" ]
+        , viewLighting settings.light
         ]
 
 
@@ -142,8 +167,7 @@ hr : Html msg
 hr =
     Html.hr
         [ css
-            [ marginTop (Css.em 0.1)
-            , color Style.theme.bg2
+            [ color Style.theme.bg2
             , opacity (num 0.5)
             ]
         ]
@@ -236,4 +260,27 @@ viewRenderOpts { msaa, worldaxes } =
             , onClick RenderToggleWorldAxes
             ]
             [ Style.checkbox [ Attr.checked worldaxes ], text "Show World Axes" ]
+        ]
+
+
+-- LIGHTING OPTIONS
+
+
+type alias LightingOptions =
+    { bearing : Float
+    , slope : Float
+    }
+
+
+viewLighting : LightingOptions -> Html Msg
+viewLighting { bearing, slope } =
+    div [ css [ fontSize (Css.em 0.9) ] ]
+        [ div [ css [ displayFlex, justifyContent spaceBetween ] ]
+            [ text "Bearing"
+            , Cmn.sliderInput [] (0, 360) bearing LightSetBearing
+            ]
+        , div [ css [ displayFlex, justifyContent spaceBetween ] ]
+            [ text "Slope"
+            , Cmn.sliderInput [] (0, 90) slope LightSetSlope
+            ]
         ]
