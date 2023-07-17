@@ -1,0 +1,141 @@
+colour
+maroon
+dark red
+brown
+fire brick
+crimson
+red
+tomato
+coral
+indian red
+light coral
+dark salmon
+salmon
+light salmon
+orange red
+dark orange
+orange
+gold
+dark golden rod
+golden rod
+pale golden rod
+dark khaki
+khaki
+olive
+yellow
+yellow green
+dark olive green
+olive drab
+lawn green
+chartreuse
+green yellow
+dark green
+green
+forest green
+lime
+lime green
+light green
+pale green
+dark sea green
+medium spring green
+spring green
+sea green
+medium aquamarine
+medium sea green
+light sea green
+dark slate gray
+teal
+dark cyan
+aqua
+cyan
+light cyan
+dark turquoise
+turquoise
+medium turquoise
+pale turquoise
+aquamarine
+powder blue
+cadet blue
+steel blue
+cornflower blue
+deep sky blue
+dodger blue
+light blue
+sky blue
+light sky blue
+midnight blue
+navy
+dark blue
+medium blue
+blue
+royal blue
+blue violet
+indigo
+dark slate blue
+slate blue
+medium slate blue
+medium purple
+dark magenta
+dark violet
+dark orchid
+medium orchid
+purple
+thistle
+plum
+violet
+fuchsia
+orchid
+medium violet red
+pale violet red
+deep pink
+hot pink
+light pink
+pink
+antique white
+beige
+bisque
+blanched almond
+wheat
+corn silk
+lemon chiffon
+light golden rod yellow
+light yellow
+saddle brown
+sienna
+chocolate
+peru
+sandy brown
+burly wood
+tan
+rosy brown
+moccasin
+navajo white
+peach puff
+misty rose
+lavender blush
+linen
+old lace
+papaya whip
+sea shell
+mint cream
+slate gray
+light slate gray
+light steel blue
+lavender
+floral white
+alice blue
+ghost white
+honey dew
+ivory
+azure
+snow
+black
+dim gray
+gray
+dark gray
+silver
+light gray
+gainsboro
+white smoke
+transparent
+white

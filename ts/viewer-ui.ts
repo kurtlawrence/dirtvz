@@ -1,4 +1,4 @@
-import { Viewer } from "./viewer/viewer";
+import { Background, LightingOptions, RenderingOptions, Viewer } from "./viewer/viewer";
 import { spawn, spawn_pool } from './worker-spawn';
 import { Store } from './store';
 import { FlatTreeItem, Status } from "./spatial-obj";
@@ -8,7 +8,8 @@ export { viewerUi };
 
 let VWR: Viewer | undefined;
 let APP: any;
-let WPR : CanvasRenderer | undefined;
+let WPR: CanvasRenderer | undefined;
+let ON_VWR_CONNECT = () => { };
 
 const DBNAME: string = 'test-db';
 
@@ -19,8 +20,13 @@ async function viewerUi(element: HTMLElement | string) {
 
     customElements.define("dirtvz-viewer", CanvasRenderer);
 
+    let settings = Settings.get();
+    if (!settings)
+        settings = new Settings();
+
     const flags = {
         object_tree: PersistObjectTree.get(DBNAME),
+        settings
     };
 
     APP = require('./../js/viewer-ui.js').Elm.ViewerUI.init({
@@ -37,6 +43,15 @@ async function viewerUi(element: HTMLElement | string) {
     store.get_object_list().then(APP.ports.object_list.send);
 
     start_preprocessing_interval(APP, store, 1000);
+
+    ON_VWR_CONNECT = () => {
+        const settings = Settings.get() ?? new Settings();
+        Settings.apply(settings, {
+            bg: true,
+            render: true,
+            light: true
+        });
+    };
 
     APP.ports.pick_spatial_file.subscribe(() => {
         let input = document.createElement("input");
@@ -83,8 +98,13 @@ async function viewerUi(element: HTMLElement | string) {
     APP.ports.persist_object_tree.subscribe((x: FlatTreeItem[]) =>
         PersistObjectTree.store(DBNAME, x));
 
-	APP.ports.hint_canvas_resize.subscribe(() => 
-		setTimeout(() => WPR?.sizeCanvas(), 100));
+    APP.ports.hint_canvas_resize.subscribe(() =>
+        setTimeout(() => WPR?.sizeCanvas(), 100));
+
+    APP.ports.settings_changed.subscribe((x: any) => {
+        Settings.store(x.settings);
+        Settings.apply(x.settings, x.changes);
+    });
 }
 
 class ElmMsg {
@@ -121,7 +141,7 @@ class CanvasRenderer extends HTMLElement {
     }
 
     connectedCallback() {
-		WPR = this;
+        WPR = this;
 
         this.obs = new ResizeObserver(e => {
             clearTimeout(this.resize_timeout);
@@ -138,11 +158,12 @@ class CanvasRenderer extends HTMLElement {
                 APP?.ports.hover_info.send(JSON.stringify(info));
             });
             VWR = x;
+            ON_VWR_CONNECT();
         });
     }
 
     disconnectedCallback() {
-		WPR = undefined;
+        WPR = undefined;
         VWR = undefined;
         this.obs?.disconnect();
         this.obs = undefined;
@@ -214,14 +235,68 @@ async function start_preprocessing_interval(app: any, store: Store, millis: numb
 
 class PersistObjectTree {
     static store(db_name: string, flat_tree: FlatTreeItem[]) {
-        localStorage.setItem(`${db_name}/object-tree`, JSON.stringify(flat_tree));
+        localStorage.setItem(`object-tree/${db_name}`, JSON.stringify(flat_tree));
     }
 
     static get(db_name: string): FlatTreeItem[] | null {
-        const x = localStorage.getItem(`${db_name}/object-tree`);
+        const x = localStorage.getItem(`object-tree/${db_name}`);
         if (x)
             return JSON.parse(x);
         else
             return null;
     }
 }
+
+class Settings {
+    bg: Background = { ty: 'linear', colours: ['oldlace', 'dimgrey'] };
+    render: RenderingOptions = { msaa: 4, worldaxes: false };
+    light: LightingOptions = { bearing: 0, slope: 90 };
+
+    static store(settings: Settings) {
+        if (settings)
+            localStorage.setItem('settings', JSON.stringify(settings));
+    }
+
+    static get(): Settings | null {
+        const x = localStorage.getItem('settings');
+        if (x) {
+            const y = new Settings();
+            try {
+                const z: Settings = JSON.parse(x);
+                Object.assign(y.bg, z.bg);
+                Object.assign(y.render, z.render);
+                Object.assign(y.light, z.light);
+                return y;
+            } catch {
+                return y;
+            }
+        } else {
+            return null;
+        }
+    }
+
+    static apply(settings: Settings, changes: Changes) {
+        if (!VWR) {
+            return;
+        }
+
+        if (changes.bg) {
+            VWR.set_background(settings.bg);
+        }
+
+        if (changes.render) {
+            VWR.set_rendering_pipeline(settings.render);
+        }
+
+        if (changes.light) {
+            VWR.set_lighting(settings.light);
+        }
+    }
+}
+
+type Changes = {
+    bg: boolean,
+    render: boolean,
+    light: boolean,
+};
+

@@ -13,6 +13,7 @@ import Notice
 import ObjectTree exposing (ObjectTree)
 import Ports exposing (HoverInfo)
 import Progress exposing (Progress)
+import Settings
 import SpatialObject exposing (SpatialObject)
 import Style
 
@@ -40,6 +41,7 @@ type alias Model =
     , nav : Nav.State
     , objs : ObjectTree
     , hoverInfo : Maybe HoverInfo
+    , settings : Settings.Model
     }
 
 
@@ -51,10 +53,12 @@ type Msg
     | RecvProgress Progress
     | ObjectTreeMsg ObjectTree.Msg
     | SetNavState Nav.State
+    | SettingsMsg Settings.Msg
 
 
 type alias Flags =
-    { object_tree : Maybe ObjectTree.FlatTree
+    { settings : Settings.Settings
+    , object_tree : Maybe ObjectTree.FlatTree
     }
 
 
@@ -67,10 +71,11 @@ type alias ObjKey =
 
 
 init : Flags -> ( Model, Cmd Msg )
-init { object_tree } =
+init { object_tree, settings } =
     ( { notice = Notice.None
       , nav = Nav.Objects
       , hoverInfo = Nothing
+      , settings = Settings.with settings
       , objs =
             case object_tree of
                 Just x ->
@@ -123,6 +128,10 @@ update msg model =
         SetNavState s ->
             ( { model | nav = s }, hint_canvas_resize () )
 
+        SettingsMsg m ->
+            Settings.update m model.settings
+                |> liftUpdate SettingsMsg (\x -> { model | settings = x })
+
 
 liftUpdate : (b -> Msg) -> (a -> Model) -> ( a, Cmd b ) -> ( Model, Cmd Msg )
 liftUpdate toMsg toModel =
@@ -134,6 +143,7 @@ liftUpdate toMsg toModel =
 
 
 port merge_object_flat_tree : (ObjectTree.FlatTree -> msg) -> Sub msg
+
 
 port hint_canvas_resize : () -> Cmd msg
 
@@ -193,6 +203,11 @@ panel1 model =
         Nav.Objects ->
             Lazy.lazy ObjectTree.view model.objs
                 |> H.map ObjectTreeMsg
+                |> Style.panel1
+
+        Nav.Settings ->
+            Lazy.lazy Settings.view model.settings
+                |> H.map SettingsMsg
                 |> Style.panel1
 
 

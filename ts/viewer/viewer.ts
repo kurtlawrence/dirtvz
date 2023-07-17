@@ -20,6 +20,7 @@ export class Viewer {
     _viewts?: number;
     _dirty: boolean = true;
     extents: Extents3 = Extents3.zero_to_one();
+    _rpipeline: BABYLON.DefaultRenderingPipeline;
 
     private static TILE_LOD_TIMEOUT: number = 200; // wait before loading
 
@@ -32,6 +33,16 @@ export class Viewer {
         this.store = store;
         this.layers = new Layers(store, this.scene);
         this._hover = new Hover(this.scene);
+
+        this._rpipeline = new BABYLON.DefaultRenderingPipeline(
+            "renderingPipeline", // The name of the pipeline
+            true, // Do you want the pipeline to use HDR texture?
+            this.scene, // The scene instance
+            [this.camera.inner] // The list of cameras to be attached to
+        );
+        this._rpipeline.fxaaEnabled = false;
+        this._rpipeline.sharpenEnabled = false;
+        this._rpipeline.bloomEnabled = false;
     }
 
     /**
@@ -112,15 +123,15 @@ export class Viewer {
         this.camera.zoomDataExtents(extents, this.canvas);
     }
 
-	canvas_size_changed() {
-		console.debug('canvas size changed');
+    canvas_size_changed() {
+        console.debug('canvas size changed');
         this.camera.redoAspectRatio(this.canvas);
-		this.scene.render();
-	}
+        this.scene.render();
+    }
 
     async toggle_object(key: string) {
         if (this.layers.is_loaded(key)) {
-			this.unload_object(key);
+            this.unload_object(key);
         } else {
             if (this.init_tiler())
                 this.load_object(key);
@@ -138,13 +149,13 @@ export class Viewer {
         this.mark_dirty();
     }
 
-	async unload_object(key: string) {
+    async unload_object(key: string) {
         if (!this.layers.is_loaded(key))
             return;
 
-		this.layers.unload(key);
-		this.mark_dirty();
-	}
+        this.layers.unload(key);
+        this.mark_dirty();
+    }
 
     onhover(cb: HoverCb) {
         this._hover.action = cb;
@@ -152,14 +163,44 @@ export class Viewer {
 
     set_background(bg: Background) {
         switch (bg.ty) {
+            case 'single':
+                this.canvas.style.background = bg.colours[0];
+                break;
+
             case 'linear':
-                this.canvas.style.background = "linear-gradient(" + bg.colours.join(',') + ")";
+                this.canvas.style.background = `linear-gradient(${bg.colours.join(',')})`;
+                break;
+
+            case 'radial':
+                this.canvas.style.background = `radial-gradient(${bg.colours.join(',')})`;
                 break;
 
             default:
                 break;
         }
 
+    }
+
+    set_rendering_pipeline(pipeline: RenderingOptions) {
+        if (!pipeline)
+            return;
+
+        console.debug(pipeline);
+
+        const pl = this._rpipeline;
+        pl.samples = pipeline.msaa;
+
+        if (pipeline.worldaxes && !this.camera.world_axes)
+            this.camera.toggle_world_axes(this.canvas);
+        else if (!pipeline.worldaxes && this.camera.world_axes)
+            this.camera.toggle_world_axes(this.canvas);
+
+        this.mark_dirty();
+    }
+
+    set_lighting(lighting: LightingOptions) {
+        this.light.redirect(lighting.bearing, lighting.slope);
+        this.mark_dirty();
     }
 
     private view_chgd() {
@@ -301,3 +342,13 @@ export type Background = {
     ty: 'single' | 'linear' | 'radial',
     colours: string[]
 };
+
+export type RenderingOptions = {
+    msaa: number,
+    worldaxes: boolean
+}
+
+export type LightingOptions = {
+    bearing: number,
+    slope: number
+}
